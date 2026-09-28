@@ -59,6 +59,7 @@ double libinput_event_touch_get_y_transformed(struct libinput_event_touch *event
     if (x <= 1080.0 * 0.67)
         return y;
 
+    /* The measured right-column taps map near grid centers after this fold. */
     y = (double)height * 0.94 - y;
     if (y < 0.0)
         return 0.0;
