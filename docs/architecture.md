@@ -35,6 +35,8 @@ The final partition layout and persistent boot installation remain open while th
 
 `scripts/configure-trial.sh` builds the AArch64 touch shim with Clang and LLD and installs it at `/usr/local/lib/willow-touch-map.so`. Sway has the `cap_sys_nice` file capability, which makes glibc ignore `LD_PRELOAD`; the tty1 launcher therefore invokes Sway through `/lib/ld-linux-aarch64.so.1 --preload`. This trial path does not retain Sway's file capability. Run `sudo /usr/local/sbin/willow-touch-map-rollback` to restore the direct Sway launcher and restart tty1.
 
+The current kernel image embeds Tianma touch firmware even though this phone's bootloader identifies a Shenchao panel. The downstream driver maps Shenchao to the EBBG firmware variant, but that does not prove the variant will fix touch. `scripts/build-ebbg-trial-boot.sh` prepares a separate RAM boot image by replacing the one embedded firmware payload with the equally sized EBBG blob. It preserves the working image and does not flash or boot the alternate image. A controlled device trial and physical taps are still needed.
+
 ## References
 
 - [Arch Linux ARM generic AArch64 root filesystem](https://archlinuxarm.org/platforms/armv8/generic)
