@@ -1,0 +1,4 @@
+Codex CLI release: rust-v0.158.0
+Asset: codex-aarch64-unknown-linux-musl.zst
+SHA-256: b57e35821fdba79e175a9d6fec40a88642a39c0e080028a893c7aa79bf333f00
+Source: https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.zst

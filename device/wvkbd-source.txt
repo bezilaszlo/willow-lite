@@ -1,0 +1,5 @@
+Upstream: https://github.com/jjsullivan5196/wvkbd
+Commit: e14b53aff4fd1f471add6b21b3885c2cff945509
+Commit date: 2026-09-20
+License: GPL-3.0-or-later
+The Sxmo maintainers maintain the upstream repository and use wvkbd for mobile Linux.

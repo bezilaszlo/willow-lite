@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the Willow panel backlight at maximum
+After=systemd-udev-trigger.service
+Before=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for panel in /sys/class/backlight/*; do [ -r "$panel/max_brightness" ] || continue; max=$(cat "$panel/max_brightness"); current=$(cat "$panel/brightness"); [ "$current" = "$max" ] || echo "$max" > "$panel/brightness"; done'
+
+[Install]
+WantedBy=multi-user.target

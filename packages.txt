@@ -1,0 +1,11 @@
+# Minimal Arch Linux ARM trial rootfs for Redmi Note 8T (aarch64).
+# Keep the base package set deliberately small; add only proven device needs.
+base
+openssh
+sudo
+git
+rsync
+sway
+quickshell
+foot
+ttf-dejavu

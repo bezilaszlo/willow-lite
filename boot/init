@@ -1,0 +1,88 @@
+#!/bin/sh
+# RAM boot init for Willow Lite. The default userdata root remains untouched;
+# willow_root selects a directory below it and is embedded in the trial image.
+export PATH=/bin:/sbin
+/bin/busybox --install -s /bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+exec </dev/console >/dev/console 2>&1
+mkdir -p /dev/pts /sys/kernel/config /sys/kernel/debug /tmp /run /storage /newroot
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+mount -t tmpfs tmpfs /run
+mount -t configfs none /sys/kernel/config 2>/dev/null
+mount -t debugfs none /sys/kernel/debug 2>/dev/null
+say() { echo "willow-lite: $*"; echo "willow-lite: $*" > /dev/kmsg; }
+
+# Keep the framebuffer lit for early boot diagnostics.
+i=0
+while [ ! -e /sys/class/graphics/fb0/blank ] && [ "$i" -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
+[ -e /sys/class/graphics/fb0/blank ] && { echo 0 > /sys/class/graphics/fb0/blank; say "unblanked fb0"; }
+
+ROOTDEV=/dev/mmcblk0p87
+i=0
+while [ ! -b "$ROOTDEV" ] && [ "$i" -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
+[ -b "$ROOTDEV" ] || { say "$ROOTDEV missing"; exec /bin/sh; }
+mount -t ext4 -o rw "$ROOTDEV" /storage || { say "userdata mount failed"; exec /bin/sh; }
+LOG=/storage/var/log/willow-lite-boot.log
+mkdir -p /storage/var/log
+{ echo "=== willow-lite boot $(date -u) ==="; dmesg | tail -40; } > "$LOG" 2>&1
+crumbs() { echo "$*" >> "$LOG"; say "$*"; }
+
+# Select only the task-owned trial directory. Missing targets fall back to the
+# intact installed root, which keeps a malformed cmdline recoverable.
+ROOTPATH=
+for arg in $(cat /proc/cmdline); do
+  case "$arg" in willow_root=*) ROOTPATH=${arg#willow_root=} ;; esac
+done
+case "$ROOTPATH" in
+  /*)
+    CANDIDATE=/storage/${ROOTPATH#/}
+    if [ -x "$CANDIDATE/sbin/init" ]; then
+      mount --bind "$CANDIDATE" /newroot || { say "trial bind mount failed; using current root"; mount --bind /storage /newroot; }
+      crumbs "selected root $ROOTPATH"
+    else
+      crumbs "trial root missing or has no /sbin/init; using current root"
+      mount --bind /storage /newroot
+    fi
+    ;;
+  *)
+    crumbs "no willow_root supplied; using current root"
+    mount --bind /storage /newroot
+    ;;
+esac
+
+# Bind a visible host USB-network gadget before handing over to systemd.
+G=/sys/kernel/config/usb_gadget/mini
+if mkdir -p "$G" 2>/dev/null && [ -d "$G" ]; then
+  echo 0x1d6b > "$G/idVendor"; echo 0x0104 > "$G/idProduct"
+  mkdir -p "$G/strings/0x409" "$G/configs/c.1/strings/0x409" "$G/functions/rndis.usb0"
+  echo moarchy > "$G/strings/0x409/manufacturer"
+  echo "willow lite RAM boot" > "$G/strings/0x409/product"
+  echo 02:00:00:00:42:01 > "$G/functions/rndis.usb0/host_addr"
+  echo 02:00:00:00:42:02 > "$G/functions/rndis.usb0/dev_addr"
+  ln -sf "$G/functions/rndis.usb0" "$G/configs/c.1/" 2>/dev/null
+  i=0; UDC=
+  while [ -z "$UDC" ] && [ "$i" -lt 60 ]; do UDC=$(ls /sys/class/udc 2>/dev/null | head -1); [ -z "$UDC" ] && sleep 0.5; i=$((i + 1)); done
+  if [ -n "$UDC" ]; then echo "$UDC" > "$G/UDC" 2>/dev/null; crumbs "gadget bound to $UDC"; else crumbs "no UDC found"; fi
+fi
+i=0
+while [ "$i" -lt 30 ]; do
+  [ "$(cat /sys/class/udc/*/state 2>/dev/null)" = configured ] && break
+  sleep 0.5; i=$((i + 1))
+done
+ifconfig lo 127.0.0.1 up 2>/dev/null
+ifconfig usb0 172.16.42.1 netmask 255.255.255.0 up 2>/dev/null && crumbs "usb0 up"
+[ -f /etc/udhcpd.conf ] && udhcpd /etc/udhcpd.conf 2>/dev/null
+telnetd -l /bin/sh -p 23 2>/dev/null && crumbs "initramfs telnet fallback started"
+
+[ -x /newroot/sbin/init ] || { crumbs "no /sbin/init in selected root"; exec /bin/sh; }
+mkdir -p /newroot/proc /newroot/sys /newroot/dev /newroot/run /newroot/tmp
+mount --move /proc /newroot/proc
+mount --move /sys /newroot/sys
+mount --move /dev /newroot/dev
+mount --move /run /newroot/run
+mount --move /tmp /newroot/tmp
+crumbs "switch_root -> /sbin/init"
+exec switch_root /newroot /sbin/init

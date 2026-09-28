@@ -1,0 +1,15 @@
+set $mod Mod4
+font pango:DejaVu Sans 12
+
+output DSI-1 scale 2
+
+input type:touch {
+    map_to_output DSI-1
+}
+
+bindsym $mod+Return exec foot
+bindsym $mod+Shift+q kill
+bindsym $mod+Shift+e exec swaymsg exit
+
+exec qs -p /home/moarchy/.config/quickshell/willow.qml
+exec wvkbd-mobintl -H 620 --hidden --wayland-layer overlay --non-exclusive
