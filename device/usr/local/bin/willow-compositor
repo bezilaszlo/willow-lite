@@ -16,7 +16,7 @@ case ${1:-status} in
         echo "compositor: $1"
         ;;
     status)
-        echo "chosen: $(cat "$state/compositor" 2>/dev/null || echo "sway (default)")"
+        echo "chosen: $(cat "$state/compositor" 2>/dev/null || echo "hyprland (default)")"
         echo "running: $(pgrep -x Hyprland >/dev/null && echo hyprland || { pgrep -x sway >/dev/null && echo sway; } || echo none)"
         tail -n 5 "$state/session.log" 2>/dev/null || true
         ;;

@@ -1,9 +1,9 @@
 #!/bin/sh
-# tty1 graphical session: Sway, or Hyprland when chosen with willow-compositor (see docs/hardware.md).
+# tty1 graphical session: Hyprland by default (Sway when chosen with willow-compositor or as fallback; see docs/hardware.md).
 # Hyprland gets two starts to light the display; otherwise, or after a crash on its last start, Sway runs.
 state=${XDG_STATE_HOME:-$HOME/.local/state}/willow
 mkdir -p "$state"
-choice=$(cat "$state/compositor" 2>/dev/null || echo sway)
+choice=$(cat "$state/compositor" 2>/dev/null || echo hyprland)
 # The root has no /etc/locale.conf; glibc's built-in C.UTF-8 keeps foot and the shell on UTF-8.
 export LANG="${LANG:-C.UTF-8}"
 log() { echo "$(date -u +%FT%TZ) $*" >>"$state/session.log"; }
