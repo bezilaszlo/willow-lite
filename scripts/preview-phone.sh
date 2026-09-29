@@ -7,16 +7,8 @@ cd "$ROOT"
 command -v sway >/dev/null || { echo "Install Sway with: omarchy pkg add sway" >&2; exit 1; }
 command -v qs >/dev/null || { echo "Quickshell (qs) is required" >&2; exit 1; }
 command -v wayvnc >/dev/null || { echo "Install wayvnc with: omarchy pkg add wayvnc" >&2; exit 1; }
-command -v gvncviewer >/dev/null || { echo "Install gtk-vnc with: omarchy pkg add gtk-vnc" >&2; exit 1; }
-
-parent_display=${WAYLAND_DISPLAY:-}
-if [ -z "$parent_display" ]; then
-    command -v hyprctl >/dev/null || { echo "Set WAYLAND_DISPLAY to the desktop socket" >&2; exit 1; }
-    parent_display=$(hyprctl instances -j | jq -r '.[0].wl_socket // empty')
-fi
-test -S "${XDG_RUNTIME_DIR:?}/$parent_display" || { echo "Wayland socket not found: $parent_display" >&2; exit 1; }
-host_sig=$(hyprctl instances -j | jq -r --arg display "$parent_display" '.[] | select(.wl_socket == $display) | .instance' | head -1)
-test -n "$host_sig" || { echo "Could not find the Omarchy desktop" >&2; exit 1; }
+test -f /usr/lib/girepository-1.0/GtkVnc-2.0.typelib || { echo "Install gtk-vnc with: omarchy pkg add gtk-vnc" >&2; exit 1; }
+/usr/bin/python -c 'import gi' 2>/dev/null || { echo "Install Python GObject with: omarchy pkg add python-gobject" >&2; exit 1; }
 
 display_file="$ROOT/out/preview-wayland-display"
 : > "$display_file"
@@ -42,8 +34,7 @@ for attempt in {1..50}; do
     sleep 0.1
 done
 
-# Float the viewer before it maps; resizing it later blanks gtk-vnc's video surface.
-HYPRLAND_INSTANCE_SIGNATURE="$host_sig" hyprctl eval 'hl.window_rule({ match = { class = "^Gvncviewer$" }, float = true, center = true, size = { 320, 700 }, tag = "-default-opacity" })' >/dev/null
-env DISPLAY="${DISPLAY:-:0}" GDK_BACKEND=x11 gvncviewer -z 55 127.0.0.1:9 &
+# Keep the phone's aspect ratio while its window tiles beside the terminal.
+env DISPLAY="${DISPLAY:-:0}" GDK_BACKEND=x11 /usr/bin/python "$ROOT/scripts/preview-viewer.py" &
 viewer_pid=$!
-wait "$preview_pid"
+wait "$viewer_pid"
