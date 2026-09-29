@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-29
+- Add an Apps switcher to the top bar: one card per open window, tap to switch, swipe sideways or tap the x to close, plus Close all. The bar buttons were narrowed so five fit in 540 px.
 
 - Make `codex` on the phone run with `--no-daemon`, since the native build reports an incomplete package for the shared background server.
 - Keep the terminal below the 92 px Quickshell top bar and reduce the on-screen keyboard to a 310 px reserved area while it is visible.
