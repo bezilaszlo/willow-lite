@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-29
+- Add a Hyprland 0.56 session beside Sway: one app at a time (monocle layout), no gaps, borders, blur or shadows, and short fades. Switch with `willow-compositor hyprland|sway` over SSH. `willow-session` checks each Hyprland start: this phone's panel stays black if Hyprland enables DSI itself, so such a start is retried once and then falls back to Sway. Sessions now run with `LANG=C.UTF-8`, which removes foot's locale warning. The Quickshell shell reaches 60 fps under Hyprland. The desktop preview stays on Sway.
 - Audit the Adreno 610 stack. Sway composites on the GPU, clocks scale from 320 to 950 MHz, the GPU suspends when idle, and the GMU `sync_state()` warning is harmless. Install the GPU firmware on the root filesystem with `scripts/install-gpu-firmware.sh` instead of relying only on the initramfs copy. Add `scripts/gpu-bench.sh` and `tests/fps-probe.qml`; glmark2 scores 227 and vkmark 319 at 1080×2340 on Sway (see `docs/hardware.md`).
 - Add an Apps switcher to the top bar: one card per open window, tap to switch, swipe sideways or tap the x to close, plus Close all. The bar buttons were narrowed so five fit in 540 px.
 

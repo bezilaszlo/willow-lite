@@ -1,0 +1,7 @@
+# Sourced by willow-session: this phone's display checks around a Hyprland start.
+# Willow's panel stays black whenever Hyprland enables DSI itself (its takeover modeset or DPMS on).
+# It lights only when Hyprland inherits the mode the kernel console set. The ginkgo kernel logs
+# every DSI enable as "ginkgo UEFI DSI", so a new line during the start means the panel went black.
+dsi_enables() { sudo -n dmesg | grep -c 'ginkgo UEFI DSI'; }
+display_mark() { dsi_mark=$(dsi_enables); }
+display_ok() { [ "$(dsi_enables)" = "$dsi_mark" ]; }

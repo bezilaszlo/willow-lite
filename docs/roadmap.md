@@ -7,12 +7,14 @@ Updated 2026-09-29.
 - Trial boot with Sway, Quickshell, foot, wvkbd, SSH, native AArch64 Codex (`--no-daemon` wrapper).
 - Phone-sized desktop preview and screenshot capture.
 - Apps overview, edge-swipe Back, three-finger screenshot (built on separate branches, not yet merged).
+- GPU audit: the Adreno 610 stack is healthy and composites on the GPU under both compositors ([hardware.md](hardware.md#gpu)).
+- Hyprland 0.56 session beside Sway, selected with `willow-compositor` and falling back to Sway.
 
 ## Now
 
-1. **GPU health and Hyprland.** Audit the Adreno stack (firmware, GMU, clocks, thermals, compositor on GPU, Vulkan), benchmark, then decide Sway versus Hyprland. Hyprland gives window animations and native window previews. Reversible over SSH, boot partition untouched.
+1. **Compositor: Hyprland, with Sway kept as the fallback.** Hyprland runs on the phone at a steady 60 fps. Its panel only lights when it inherits the console's mode ([hardware.md](hardware.md#hyprland-and-the-dsi-panel-willow)), so `willow-session` checks every start. Before Sway's config and the fallback can be removed: test a cold boot straight into Hyprland, see the retry path work once, and ideally fix the panel re-prepare in the kernel.
 2. **Merge the three gesture features** and deploy for physical touch testing.
-3. **Port gestures** to the chosen compositor, with the live cancelable Back animation ([gestures.md](gestures.md)).
+3. **Port gestures** to Hyprland, with the live cancelable Back animation ([gestures.md](gestures.md#porting-between-sway-and-hyprland)). This includes window focus by Hyprland address and `ScreencopyView` thumbnails in the overview.
 
 ## Next
 

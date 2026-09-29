@@ -6,6 +6,8 @@ sudo
 git
 rsync
 sway
+hyprland
+grim
 quickshell
 foot
 ttf-dejavu

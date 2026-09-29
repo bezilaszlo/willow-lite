@@ -1,0 +1,27 @@
+#!/bin/sh
+# Choose the tty1 compositor and restart the graphical session: willow-compositor hyprland|sway|status
+set -eu
+state=${XDG_STATE_HOME:-$HOME/.local/state}/willow
+mkdir -p "$state"
+case ${1:-status} in
+    hyprland | sway)
+        echo "$1" >"$state/compositor"
+        rm -f "$state/hyprland-crashed"
+        # Ending the compositor ends the tty1 login; getty logs in again and willow-session reads the choice.
+        if pgrep -x Hyprland >/dev/null; then
+            hyprctl -i 0 dispatch 'hl.dsp.exit()' >/dev/null || pkill -x Hyprland
+        elif pgrep -x sway >/dev/null; then
+            swaymsg -s "$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/sway-ipc.*.sock | head -1)" exit >/dev/null || pkill -x sway
+        fi
+        echo "compositor: $1"
+        ;;
+    status)
+        echo "chosen: $(cat "$state/compositor" 2>/dev/null || echo "sway (default)")"
+        echo "running: $(pgrep -x Hyprland >/dev/null && echo hyprland || { pgrep -x sway >/dev/null && echo sway; } || echo none)"
+        tail -n 5 "$state/session.log" 2>/dev/null || true
+        ;;
+    *)
+        echo "usage: willow-compositor hyprland|sway|status" >&2
+        exit 2
+        ;;
+esac

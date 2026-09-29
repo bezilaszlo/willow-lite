@@ -25,6 +25,7 @@ ssh "$PHONE" "
   sudo install -D -o root -g root -m 0644 '$STAGE/etc/systemd/network/10-willow-usb.network' \"\$target/etc/systemd/network/10-willow-usb.network\"
   sudo install -D -o root -g root -m 0440 '$STAGE/etc/sudoers.d/10-willow-lite' \"\$target/etc/sudoers.d/10-willow-lite\"
   sudo visudo -c -f \"\$target/etc/sudoers.d/10-willow-lite\"
+  sudo install -D -o root -g root -m 0755 -t \"\$target/usr/local/bin\" '$STAGE/usr/local/bin/willow-session' '$STAGE/usr/local/bin/willow-compositor'
   sudo cp -a '$STAGE/home/moarchy/.' \"\$target/home/moarchy/\"
   sudo install -d -o \"\$uid\" -g \"\$gid\" -m 0700 \"\$target/home/moarchy/.ssh\"
   sudo chown -R \"\$uid:\$gid\" \"\$target/home/moarchy\"

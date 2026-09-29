@@ -23,6 +23,21 @@ What Back does, in order: hide the on-screen keyboard if shown; otherwise close 
 
 A carousel of app cards with a thumbnail of each running app, most recent in the center. Tap a card to switch, swipe a card up to close it, and use Close all to clear everything. Thumbnails come from per-window capture (`grim -T`) on Sway or Quickshell's `ScreencopyView` on Hyprland.
 
+## Porting between Sway and Hyprland
+
+The gesture branches were written for Sway. Most of their code uses Wayland protocols that both compositors support; only the items below are Sway-specific. Keep each compositor call in one small function so it can be swapped.
+
+| Branch feature | Sway-specific part | Hyprland equivalent (0.56, Lua config) |
+|---|---|---|
+| Three-finger screenshot | Started with `exec` in the Sway config. The evdev reader and `grim` need no compositor support; grim uses wlr-screencopy, which Hyprland also offers. | `hl.exec_cmd(...)` inside `hl.on("hyprland.start", ...)` in `willow.lua` |
+| Back gesture | `wtype -k Escape` (virtual-keyboard, works on both). The keyboard is detected from the band's height, which relies on the compositor shrinking non-exclusive layer surfaces by other exclusive zones. | Hyprland arranges layers the same way, but this is not yet measured with wvkbd on Hyprland. `hyprctl -j layers`, which lists the `wvkbd` namespace, is a direct test. |
+| Overview | `import Quickshell.I3`, `swaymsg -r -t get_tree` for the window list and focus order, `I3.dispatch("[con_id=N] focus")` and `"[con_id=N] kill"`, thumbnails from `grim -T <foreign-toplevel id>` | `import Quickshell.Hyprland`: `Hyprland.toplevels` (focus history via `HyprlandToplevel.lastIpcObject.focusHistoryID`), `Hyprland.dispatch('hl.dsp.focus({ window = "address:0x…" })')` and `'hl.dsp.window.close({ window = "address:0x…" })'`, and thumbnails from `ScreencopyView { captureSource: hyprlandToplevel.wayland; live: false }` over Hyprland's toplevel export |
+| Apps switcher on `main` | `Toplevel.activate()` does nothing on Sway 1.12 | It does nothing on Hyprland 0.56 either, even with `misc.focus_on_activate`. Focus with the `hl.dsp.focus` dispatch above. `Toplevel.close()` works. |
+
+Checked on the phone under Hyprland: `hl.dsp.focus({ window = "address:0x…" })` switches the focused window. `Toplevel.close()` closes it. `Hyprland.toplevels` lists the same windows as `ToplevelManager`, each with a non-null `.wayland` toplevel for capture (this needs `HYPRLAND_INSTANCE_SIGNATURE`, which the session sets). The `ScreencopyView` thumbnails themselves are not built or measured yet.
+
+Hyprland 0.56 rejects `hyprctl keyword` under a Lua config; runtime changes go through `hyprctl eval 'hl…'` or `hyprctl dispatch 'hl.dsp…'`. A Hyprland DPMS off/on re-enables DSI and can leave this phone's panel black, so a gesture must never use it.
+
 ## Open points
 
 - Feel tuning with real fingers: edge band width (24 px), Back threshold (72 px).

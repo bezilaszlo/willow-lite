@@ -1,0 +1,61 @@
+#!/bin/sh
+# tty1 graphical session: Sway, or Hyprland when chosen with willow-compositor (see docs/hardware.md).
+# Hyprland gets two starts to light the display; otherwise, or after a crash on its last start, Sway runs.
+state=${XDG_STATE_HOME:-$HOME/.local/state}/willow
+mkdir -p "$state"
+choice=$(cat "$state/compositor" 2>/dev/null || echo sway)
+# The root has no /etc/locale.conf; glibc's built-in C.UTF-8 keeps foot and the shell on UTF-8.
+export LANG="${LANG:-C.UTF-8}"
+log() { echo "$(date -u +%FT%TZ) $*" >>"$state/session.log"; }
+
+sway_session() {
+    log "starting sway${1:+ ($1)}"
+    exec sway >"$state/sway.log" 2>&1
+}
+
+# Device hooks may replace these; the defaults trust Hyprland's own monitor report.
+display_mark() { :; }
+display_ok() { :; }
+if [ -r "$HOME/.config/willow/display-quirks" ]; then
+    . "$HOME/.config/willow/display-quirks"
+fi
+
+# Start Hyprland and wait until DSI-1 is on; returns 1 if it never is or the device check fails.
+start_hyprland() {
+    display_mark
+    log "starting hyprland"
+    HYPRLAND_STARTED_VIA_WRAPPER=1 Hyprland -c "$HOME/.config/hypr/hyprland.lua" >"$state/hyprland.log" 2>&1 &
+    pid=$!
+    tries=0
+    until hyprctl -i 0 -j monitors 2>/dev/null | grep -q '"dpmsStatus": true'; do
+        tries=$((tries + 1))
+        kill -0 "$pid" 2>/dev/null && [ "$tries" -lt 40 ] || { stop_hyprland; return 1; }
+        sleep 0.5
+    done
+    sleep 1
+    display_ok || { log "hyprland enabled the display itself"; stop_hyprland; return 1; }
+    log "hyprland healthy after $tries checks"
+}
+
+# A clean exit hands the display back to the kernel console, which the next start inherits.
+stop_hyprland() {
+    hyprctl -i 0 dispatch 'hl.dsp.exit()' >/dev/null 2>&1 || kill "$pid" 2>/dev/null
+    wait "$pid"
+}
+
+if [ "$choice" != hyprland ] || ! command -v Hyprland >/dev/null; then
+    sway_session
+fi
+if [ -e "$state/hyprland-crashed" ]; then
+    rm -f "$state/hyprland-crashed"
+    sway_session "Hyprland crashed on its last start"
+fi
+start_hyprland || start_hyprland || sway_session "Hyprland did not light the display"
+started=$(date +%s)
+wait "$pid"
+status=$?
+log "hyprland exited with $status"
+# A crash soon after start usually repeats; make the next login use Sway once.
+if [ "$status" -ne 0 ] && [ $(($(date +%s) - started)) -lt 60 ]; then
+    : >"$state/hyprland-crashed"
+fi
