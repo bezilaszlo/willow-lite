@@ -29,9 +29,9 @@ ShellRoot {
             right: true
         }
         implicitHeight: 92
-        exclusiveZone: 0
+        exclusiveZone: implicitHeight
         color: "#111827"
-        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.layer: WlrLayer.Top
 
         MouseArea {
             anchors.fill: parent

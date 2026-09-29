@@ -12,4 +12,4 @@ bindsym $mod+Shift+q kill
 bindsym $mod+Shift+e exec swaymsg exit
 
 exec qs -p /home/moarchy/.config/quickshell/willow.qml
-exec wvkbd-mobintl -H 620 --hidden --wayland-layer overlay --non-exclusive
+exec wvkbd-mobintl -H 310 --hidden --wayland-layer overlay

@@ -14,7 +14,7 @@ The root filesystem is Arch Linux ARM for AArch64, installed on writable device 
 - **Kernel and early boot changes:** rebuild only the small boot image and RAM boot it again.
 - **Recovery:** retain SSH access and a text console independently of the graphical session. Start the compositor explicitly until the display path is reliable.
 - **Touch:** Sway maps the touchscreen to the single DSI output. This phone's Shenchao variant needs the EBBG firmware payload embedded in the RAM boot kernel. Physical 1–9 and two-finger checks now produce correctly placed raw contacts without a userspace remap.
-- **Keyboard controls:** wvkbd provides basic typing for this trial. The planned replacement is a programmable Quickshell bottom panel whose model can define buttons, labels, icons, modes, contextual options, and actions such as typing text, sending keys, or launching apps.
+- **Keyboard controls:** wvkbd provides basic typing for this trial. Its 310 logical pixel layer reserves space only while shown, leaving the terminal visible above it. The Quickshell top bar reserves 92 logical pixels so the terminal starts below the controls. The planned replacement is a programmable Quickshell bottom panel whose model can define buttons, labels, icons, modes, contextual options, and actions such as typing text, sending keys, or launching apps.
 
 ## Decisions to prove on the existing system
 
