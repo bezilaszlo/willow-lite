@@ -24,3 +24,5 @@ ssh "$PHONE" "test ! -e '$REMOTE_ARCHIVE' && test ! -e '$REMOTE_BINARY' && test 
 scp "$OUT/$ASSET" "$PHONE:$REMOTE_ARCHIVE"
 ssh "$PHONE" "sudo zstd --decompress --force '$REMOTE_ARCHIVE' -o '$REMOTE_BINARY' && sudo install -D -o root -g root -m 0755 '$REMOTE_BINARY' '$TARGET/usr/local/bin/codex'"
 ssh "$PHONE" "sudo chroot '$TARGET' /usr/local/bin/codex --version"
+scp device/usr/local/sbin/codex "$PHONE:/tmp/willow-lite-codex-wrapper"
+ssh "$PHONE" "sudo install -D -o root -g root -m 0755 /tmp/willow-lite-codex-wrapper '$TARGET/usr/local/sbin/codex' && rm /tmp/willow-lite-codex-wrapper"

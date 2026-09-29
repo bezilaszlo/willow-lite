@@ -1,0 +1,3 @@
+#!/bin/sh
+# The bundled musl build lacks the package files the shared background server needs.
+exec /usr/local/bin/codex --no-daemon "$@"
