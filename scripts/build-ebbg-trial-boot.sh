@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SOURCE="$ROOT/out/boot-willow-lite.img"
-TARGET="$ROOT/out/boot-willow-lite-ebbg.img"
+SOURCE="$ROOT/out/boot-willow-lite-tianma.img"
+TARGET="$ROOT/out/boot-willow-lite.img"
 FIRMWARE=/home/bezi/Work/moarchy-willow/ginkgo-mainline-linux/firmware/ginkgo
 
 test -s "$SOURCE"
@@ -47,7 +47,7 @@ dtb = source[dtb_start:dtb_start + dtb_size]
 target = Path(os.environ["TARGET"])
 target.write_bytes(bytes(header) + pad(new_kernel) + pad(ramdisk) + pad(dtb))
 assert gzip.decompress(new_kernel) == candidate
-print(f"Experimental EBBG RAM boot: {target} ({target.stat().st_size} bytes)")
+print(f"EBBG RAM boot: {target} ({target.stat().st_size} bytes)")
 print(f"Kernel SHA-256: {hashlib.sha256(new_kernel).hexdigest()}")
-print("This image changes only the embedded touch firmware payload. Do not flash it to a partition.")
+print("The Tianma recovery image remains beside it. No partition is flashed by this script.")
 PY

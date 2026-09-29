@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-rm -f /usr/local/lib/willow-touch-map.so
-systemctl restart getty@tty1.service

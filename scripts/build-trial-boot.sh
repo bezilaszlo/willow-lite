@@ -15,7 +15,7 @@ cp -a "$WILLOW/mini/root" "$TREE"
 install -m 0755 "$ROOT/boot/init" "$TREE/init"
 (cd "$TREE" && find . -print0 | sort -z | cpio --null -o -H newc --reproducible 2>/dev/null | gzip -9 -n > "$OUT/willow-lite-ramdisk.cpio.gz")
 
-DIAG="$DIAG" NORMAL="$NORMAL" RAMDISK="$OUT/willow-lite-ramdisk.cpio.gz" IMAGE="$OUT/boot-willow-lite.img" python3 - <<'PY'
+DIAG="$DIAG" NORMAL="$NORMAL" RAMDISK="$OUT/willow-lite-ramdisk.cpio.gz" IMAGE="$OUT/boot-willow-lite-tianma.img" python3 - <<'PY'
 import os
 import struct
 
@@ -45,4 +45,5 @@ with open(os.environ["IMAGE"], "wb") as image:
     image.write(pad(dtb))
 print(f"kernel={len(kernel)} ramdisk={len(ramdisk)} dtb={len(dtb)} image={os.path.getsize(os.environ['IMAGE'])}")
 PY
-sha256sum "$OUT/willow-lite-ramdisk.cpio.gz" "$OUT/boot-willow-lite.img"
+"$ROOT/scripts/build-ebbg-trial-boot.sh"
+sha256sum "$OUT/willow-lite-ramdisk.cpio.gz" "$OUT/boot-willow-lite-tianma.img" "$OUT/boot-willow-lite.img"

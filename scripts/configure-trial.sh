@@ -7,7 +7,6 @@ TARGET=/var/lib/willow-lite-trial
 STAGE=/tmp/willow-lite-device-config
 
 test -d "$ROOT/device"
-bash "$ROOT/scripts/build-touch-map.sh"
 tar -C "$ROOT/device" -cf - . | ssh "$PHONE" "sudo install -d -m 0700 '$STAGE' && sudo tar --no-same-owner -C '$STAGE' -xf -"
 ssh "$PHONE" "sudo test -x '$TARGET/sbin/init'"
 
@@ -40,8 +39,7 @@ ssh "$PHONE" "
   sudo systemd-tmpfiles --root=\"\$target\" --create
   sudo install -D -o root -g root -m 0644 '$STAGE/etc/systemd/system/getty@tty1.service.d/autologin.conf' \"\$target/etc/systemd/system/getty@tty1.service.d/autologin.conf\"
   sudo install -D -o root -g root -m 0644 '$STAGE/etc/systemd/system/willow-backlight.service' \"\$target/etc/systemd/system/willow-backlight.service\"
-  sudo install -D -o root -g root -m 0755 '$ROOT/out/willow-touch-map.so' \"\$target/usr/local/lib/willow-touch-map.so\"
-  sudo install -D -o root -g root -m 0755 '$STAGE/usr/local/sbin/willow-touch-map-rollback' \"\$target/usr/local/sbin/willow-touch-map-rollback\"
+  sudo rm -f \"\$target/usr/local/lib/willow-touch-map.so\" \"\$target/usr/local/sbin/willow-touch-map-rollback\"
   sudo systemctl --root=\"\$target\" enable willow-backlight.service
   sudo rm -rf '$STAGE'
 "
