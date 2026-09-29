@@ -6,7 +6,7 @@
 | SoC | Snapdragon 665 (SM6125) |
 | GPU | Adreno 610, Freedreno (`msm` DRM, render node `/dev/dri/renderD128`) |
 | Display | 1080×2340 panel; logical 540×1170 at scale 2 |
-| Touch | Novatek, needs the EBBG firmware payload in the RAM boot kernel |
+| Touch | Needs the EBBG firmware payload in the RAM boot kernel |
 | Boot | RAM boot over fastboot; boot partition untouched; root at `/var/lib/willow-lite-trial` |
 | Access | USB networking, `moarchy@172.16.42.1`, SSH with sudo |
 
