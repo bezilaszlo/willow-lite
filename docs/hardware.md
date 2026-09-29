@@ -64,3 +64,7 @@ Note that the Mali-400 and GLES 2.0 comments in the moarchy notes describe a dif
 - The phone has no internet route. pacman works through a reverse SOCKS tunnel: `ssh -N -R 127.0.0.1:1080 moarchy@172.16.42.1` on the host, then `sudo env all_proxy=socks5h://127.0.0.1:1080 pacman --disable-sandbox …` on the phone. The kernel lacks Landlock, so pacman's download sandbox must be disabled.
 - No uinput in the kernel, so touches cannot be faked on the device.
 - The Codex CLI must run with `--no-daemon`; a wrapper at `/usr/local/sbin/codex` does this.
+
+### Cold boot check (2026-09-29)
+
+A RAM boot straight into Hyprland: the first start enabled the display itself, `willow-session` stopped it cleanly, the retry inherited the console mode and was healthy, and the panel was lit (visually confirmed). This exercised the retry path once. One boot only; repeat before removing Sway.
