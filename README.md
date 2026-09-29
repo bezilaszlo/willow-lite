@@ -27,4 +27,6 @@ The trial package root is `/var/lib/willow-lite-trial` on the phone. Packages ar
 
 See [docs/architecture.md](docs/architecture.md) for the proposed layout and iteration loop.
 
+For desktop GUI iteration on Omarchy, install Sway with `omarchy pkg add sway` and run `bash scripts/preview-phone.sh`. It opens an isolated, 540×1170 logical pixel Sway window running the same Quickshell QML as the device. Run `bash scripts/capture-preview.sh` to save a screenshot under `out/`. The preview exercises layout and pointer-driven interactions; panel, backlight, and physical touch behavior still require the phone.
+
 This repository describes the local Willow Lite trial, not a bootable release. `scripts/configure-trial.sh` configures the staged trial root, and `scripts/build-trial-boot.sh` creates the RAM boot image.
