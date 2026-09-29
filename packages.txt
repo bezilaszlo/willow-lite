@@ -9,3 +9,9 @@ sway
 quickshell
 foot
 ttf-dejavu
+# GPU diagnostics for scripts/gpu-bench.sh; the desktop does not need them.
+glmark2
+mesa-utils
+vulkan-freedreno
+vulkan-tools
+vkmark

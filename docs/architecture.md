@@ -27,7 +27,7 @@ The root filesystem is Arch Linux ARM for AArch64, installed on writable device 
 
 1. Install the manifest into a new trial directory with an isolated pacman database; leave the existing userdata root untouched.
 2. Configure USB networking, SSH, and the trial user from the versioned files under `device/`.
-3. Run `scripts/install-codex.sh` to install the pinned native AArch64 Codex binary.
+3. Run `scripts/install-codex.sh` to install the pinned native AArch64 Codex binary, and `scripts/install-gpu-firmware.sh` to install the Adreno 610 firmware (see [hardware.md](hardware.md#gpu)).
 4. Build the small trial boot image and RAM boot it with the known-good fastboot workflow. Keep the current boot image ready for recovery.
 5. Iterate over USB networking: sync changed files, use pacman on the device, and reload Quickshell or restart only the affected service.
 6. Once boot, recovery, Codex, and the GUI work, prepare a deliberate install to userdata.
