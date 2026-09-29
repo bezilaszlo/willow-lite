@@ -10,7 +10,7 @@ The root filesystem is Arch Linux ARM for AArch64, installed on writable device 
 
 - **System changes:** install and update packages with pacman; edit service and system configuration over SSH. Affected services may need a restart.
 - **Desktop changes:** edit QML, assets, and configuration on the mounted root filesystem. Quickshell watches its configuration files and reloads changes. Keep the UI source in Git and sync changed files over USB networking with rsync.
-- **Desktop preview:** `scripts/preview-phone.sh` runs the device's Quickshell QML in a nested Sway session at 540×1170 logical pixels on the Omarchy desktop. `scripts/capture-preview.sh` captures that output. Use the phone for hardware and physical touch checks.
+- **Desktop preview:** `scripts/preview-phone.sh` runs the device's Quickshell QML in a headless Sway session at 540×1170 logical pixels and shows it in a scaled native VNC viewer on Omarchy. `scripts/capture-preview.sh` captures the full-size output. Use the phone for hardware and physical touch checks.
 - **Kernel and early boot changes:** rebuild only the small boot image and RAM boot it again.
 - **Recovery:** retain SSH access and a text console independently of the graphical session. Start the compositor explicitly until the display path is reliable.
 - **Touch:** Sway maps the touchscreen to the single DSI output. This phone's Shenchao variant needs the EBBG firmware payload embedded in the RAM boot kernel. Physical 1–9 and two-finger checks now produce correctly placed raw contacts without a userspace remap.
