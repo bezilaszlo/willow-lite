@@ -16,6 +16,8 @@ Updated 2026-09-29.
 
 ## Next
 
+0. **Restructure into shell / platforms / devices** with a `device.toml` per phone ([device-layout.md](device-layout.md)), in one commit after the merges above.
+
 4. **Redesign** to the [vision](vision.md): design language, status bar, home and launcher, overview, transitions. Review screenshots before deploying.
 5. **Real input model:** replace wvkbd with a programmable Quickshell panel (buttons, modes, contextual options).
 6. Fix the phone clock and confirm persistence across reboots.

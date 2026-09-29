@@ -9,6 +9,7 @@ Willow Lite is an experimental phone OS for the Xiaomi Redmi Note 8 (`willow`): 
 | [gestures.md](gestures.md) | Gesture behavior spec |
 | [hardware.md](hardware.md) | Device facts, GPU state, known quirks |
 | [references.md](references.md) | Sibling repos and what to reuse from them |
+| [device-layout.md](device-layout.md) | Shell, platform and device layers, the device manifest |
 | [architecture.md](architecture.md) | Boot, root filesystem, iteration workflow |
 
 Keep decisions here, not in chat or agent memory. Update the relevant doc in the same change that alters behavior, and add a line to [CHANGELOG.md](../CHANGELOG.md).
