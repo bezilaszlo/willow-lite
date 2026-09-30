@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Y=C4=B0=C4=9E=C4=B0TCAN=20KAVAKLI?=
+ <yigitcan-kavakli@rfc.invalid>
+Date: Tue, 29 Sep 2026 17:23:04 +0200
+Subject: drm/msm/dsi: separate host link enable from video stream enable
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+RFC 9/10; bridge hook adapted to the v7.2 legacy .enable callback.
+Link: https://lore.kernel.org/all/20260911-ginkgo-submission-final-v1-9-0e68e63a18d4@gmail.com
+Signed-off-by: YİĞİTCAN KAVAKLI <yigitcan-kavakli@rfc.invalid>
+---
+ drivers/gpu/drm/msm/dsi/dsi.h         |  1 +
+ drivers/gpu/drm/msm/dsi/dsi_host.c    | 23 ++++++++++++-----------
+ drivers/gpu/drm/msm/dsi/dsi_manager.c | 18 ++++++++++++++++++
+ 3 files changed, 31 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dsi/dsi.h b/drivers/gpu/drm/msm/dsi/dsi.h
+index 93c028a12..cfb2b51ca 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi.h
++++ b/drivers/gpu/drm/msm/dsi/dsi.h
+@@ -69,6 +69,7 @@ int msm_dsi_host_cmd_rx(struct mipi_dsi_host *host,
+ void msm_dsi_host_cmd_xfer_commit(struct mipi_dsi_host *host,
+ 					u32 dma_base, u32 len);
+ int msm_dsi_host_enable(struct mipi_dsi_host *host);
++void msm_dsi_host_enable_video(struct mipi_dsi_host *host);
+ int msm_dsi_host_disable(struct mipi_dsi_host *host);
+ void msm_dsi_host_enable_irq(struct mipi_dsi_host *host);
+ void msm_dsi_host_disable_irq(struct mipi_dsi_host *host);
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+index 16b3facc3..cb2b81e2a 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -2433,22 +2433,23 @@ int msm_dsi_host_enable(struct mipi_dsi_host *host)
+ {
+ 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+ 
+-	dsi_op_mode_config(msm_host,
+-		!!(msm_host->mode_flags & MIPI_DSI_MODE_VIDEO), true);
++	/* Keep DSI host in command mode (VID_MODE_EN = 0) during panel init
++	 * to allow clean DCS communication without premature video engine startup.
++	 */
++	dsi_op_mode_config(msm_host, false, true);
+ 
+-	/* TODO: clock should be turned off for command mode,
+-	 * and only turned on before MDP START.
+-	 * This part of code should be enabled once mdp driver support it.
+-	 */
+-	/* if (msm_panel->mode == MSM_DSI_CMD_MODE) {
+-	 *	dsi_link_clk_disable(msm_host);
+-	 *	pm_runtime_put(&msm_host->pdev->dev);
+-	 * }
+-	 */
+ 	msm_host->enabled = true;
+ 	return 0;
+ }
+ 
++void msm_dsi_host_enable_video(struct mipi_dsi_host *host)
++{
++	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
++
++	if (msm_host->mode_flags & MIPI_DSI_MODE_VIDEO)
++		dsi_op_mode_config(msm_host, true, true);
++}
++
+ int msm_dsi_host_disable(struct mipi_dsi_host *host)
+ {
+ 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_manager.c b/drivers/gpu/drm/msm/dsi/dsi_manager.c
+index 46faeaae9..90e299f98 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_manager.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_manager.c
+@@ -444,9 +444,27 @@ static int dsi_mgr_bridge_attach(struct drm_bridge *bridge,
+ 				 bridge, flags);
+ }
+ 
++static void dsi_mgr_bridge_enable(struct drm_bridge *bridge)
++{
++	int id = dsi_mgr_bridge_get_id(bridge);
++	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
++	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
++	bool is_bonded_dsi = IS_BONDED_DSI();
++
++	DBG("id=%d", id);
++
++	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
++		return;
++
++	msm_dsi_host_enable_video(msm_dsi->host);
++	if (is_bonded_dsi && msm_dsi1)
++		msm_dsi_host_enable_video(msm_dsi1->host);
++}
++
+ static const struct drm_bridge_funcs dsi_mgr_bridge_funcs = {
+ 	.attach = dsi_mgr_bridge_attach,
+ 	.pre_enable = dsi_mgr_bridge_pre_enable,
++	.enable = dsi_mgr_bridge_enable,
+ 	.post_disable = dsi_mgr_bridge_post_disable,
+ 	.mode_set = dsi_mgr_bridge_mode_set,
+ 	.mode_valid = dsi_mgr_bridge_mode_valid,

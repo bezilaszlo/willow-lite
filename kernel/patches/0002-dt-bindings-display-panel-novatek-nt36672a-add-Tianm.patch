@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Y=C4=B0=C4=9E=C4=B0TCAN=20KAVAKLI?=
+ <yigitcan-kavakli@rfc.invalid>
+Date: Tue, 29 Sep 2026 17:22:41 +0200
+Subject: dt-bindings: display: panel: novatek,nt36672a: add Tianma FHD+ video
+ mode variant
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+RFC 3/10, applied unchanged.
+Link: https://lore.kernel.org/all/20260911-ginkgo-submission-final-v1-3-0e68e63a18d4@gmail.com
+Signed-off-by: YİĞİTCAN KAVAKLI <yigitcan-kavakli@rfc.invalid>
+---
+ .../devicetree/bindings/display/panel/novatek,nt36672a.yaml      | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/display/panel/novatek,nt36672a.yaml b/Documentation/devicetree/bindings/display/panel/novatek,nt36672a.yaml
+index 5d16d8511..9f42b1ef0 100644
+--- a/Documentation/devicetree/bindings/display/panel/novatek,nt36672a.yaml
++++ b/Documentation/devicetree/bindings/display/panel/novatek,nt36672a.yaml
+@@ -23,6 +23,7 @@ properties:
+     items:
+       - enum:
+           - tianma,fhd-video
++          - tianma,fhd-video-ginkgo
+       - const: novatek,nt36672a
+     description: This indicates the panel manufacturer of the panel that is
+       in turn using the NT36672A panel driver. This compatible string

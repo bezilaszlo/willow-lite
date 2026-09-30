@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bezilaszlo <bezilaszlo95@gmail.com>
+Date: Wed, 30 Sep 2026 22:06:49 +0200
+Subject: fix(drm/msm): trial zero prefetch on SM6125 INTF1
+
+Experimental display candidate with INTF_1 prefetch disabled. The console-hold trial was visibly working; intermittent black graphical startup remains unresolved.
+---
+ drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h
+index ec0315284..80b4273a1 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h
+@@ -157,7 +157,7 @@ static const struct dpu_intf_cfg sm6125_intf[] = {
+ 		.base = 0x6a800, .len = 0x2c0,
+ 		.type = INTF_DSI,
+ 		.controller_id = 0,
+-		.prog_fetch_lines_worst_case = 24,
++		.prog_fetch_lines_worst_case = 0,
+ 		.intr_underrun = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 26),
+ 		.intr_vsync = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 27),
+ 		.intr_tear_rd_ptr = DPU_IRQ_IDX(MDP_INTF1_TEAR_INTR, 2),

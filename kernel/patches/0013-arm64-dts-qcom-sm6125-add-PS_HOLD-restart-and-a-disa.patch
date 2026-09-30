@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bezilaszlo <bezilaszlo95@gmail.com>
+Date: Tue, 29 Sep 2026 17:26:00 +0200
+Subject: arm64: dts: qcom: sm6125: add PS_HOLD restart and a disabled APSS
+ watchdog
+
+PS_HOLD is the reset path the community ginkgo DT relies on for
+reboot-mode requests. The watchdog uses the SM6115 compatible.
+---
+ arch/arm64/boot/dts/qcom/sm6125.dtsi | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sm6125.dtsi b/arch/arm64/boot/dts/qcom/sm6125.dtsi
+index ba026b99d..4b210945a 100644
+--- a/arch/arm64/boot/dts/qcom/sm6125.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm6125.dtsi
+@@ -743,6 +743,11 @@ spmi_bus: spmi@1c40000 {
+ 			#interrupt-cells = <4>;
+ 		};
+ 
++		restart@440b000 {
++			compatible = "qcom,pshold";
++			reg = <0x0440b000 0x4>;
++		};
++
+ 		rpm_msg_ram: sram@45f0000 {
+ 			compatible = "qcom,rpm-msg-ram";
+ 			reg = <0x045f0000 0x7000>;
+@@ -1689,6 +1694,14 @@ apps_smmu: iommu@c600000 {
+ 			#iommu-cells = <2>;
+ 		};
+ 
++		watchdog@f017000 {
++			compatible = "qcom,apss-wdt-sm6115", "qcom,kpss-wdt";
++			reg = <0x0f017000 0x1000>;
++			clocks = <&sleep_clk>;
++			interrupts = <GIC_SPI 3 IRQ_TYPE_EDGE_RISING>;
++			status = "disabled";
++		};
++
+ 		apcs_glb: mailbox@f111000 {
+ 			compatible = "qcom,sm6125-apcs-hmss-global",
+ 				     "qcom,msm8994-apcs-kpss-global";

@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bezilaszlo <bezilaszlo95@gmail.com>
+Date: Wed, 30 Sep 2026 16:53:13 +0200
+Subject: fix(input): use EBBG firmware and stable SPI settings
+
+---
+ arch/arm64/boot/dts/qcom/sm6125-xiaomi-ginkgo-common.dtsi | 3 +++
+ drivers/input/touchscreen/novatek-nt36672a-spi.c          | 4 ++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sm6125-xiaomi-ginkgo-common.dtsi b/arch/arm64/boot/dts/qcom/sm6125-xiaomi-ginkgo-common.dtsi
+index c89b560a9..2b61d04f2 100644
+--- a/arch/arm64/boot/dts/qcom/sm6125-xiaomi-ginkgo-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm6125-xiaomi-ginkgo-common.dtsi
+@@ -422,6 +422,9 @@ backlight: backlight@36 {
+ };
+ 
+ &spi2 {
++	pinctrl-1 = <&qup_spi2_default>;
++	/delete-property/ dmas;
++	/delete-property/ dma-names;
+ 	status = "okay";
+ 
+ 	touchscreen@0 {
+diff --git a/drivers/input/touchscreen/novatek-nt36672a-spi.c b/drivers/input/touchscreen/novatek-nt36672a-spi.c
+index 7832534ad..4c135f78a 100644
+--- a/drivers/input/touchscreen/novatek-nt36672a-spi.c
++++ b/drivers/input/touchscreen/novatek-nt36672a-spi.c
+@@ -31,8 +31,8 @@
+ 
+ #define NVT_MAX_TOUCHES                        10
+ #define NVT_POINT_DATA_LEN             65
+-#define NVT_TRANSFER_LEN               1024
+-#define NVT_DEFAULT_FW_NAME            "novatek/nt36672a_tianma.bin"
++#define NVT_TRANSFER_LEN               32
++#define NVT_DEFAULT_FW_NAME            "novatek_ts_ebbg_fw.bin"
+ #define NVT_FW_MIN_SIZE                0x40
+ #define NVT_FW_INFO_START              0x30
+ #define NVT_FW_INFO_SIZE               0x10

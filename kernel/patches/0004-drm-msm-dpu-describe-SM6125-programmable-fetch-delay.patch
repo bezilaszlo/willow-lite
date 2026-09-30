@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Y=C4=B0=C4=9E=C4=B0TCAN=20KAVAKLI?=
+ <yigitcan-kavakli@rfc.invalid>
+Date: Tue, 29 Sep 2026 17:22:42 +0200
+Subject: drm/msm/dpu: describe SM6125 programmable-fetch delayed-start quirk
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+RFC 7/10, applied unchanged. Needed for any pixel output on DPU 5.4.
+Link: https://lore.kernel.org/all/20260911-ginkgo-submission-final-v1-7-0e68e63a18d4@gmail.com
+Signed-off-by: YİĞİTCAN KAVAKLI <yigitcan-kavakli@rfc.invalid>
+---
+ .../gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h    |  1 +
+ drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c  | 11 +++++++++++
+ drivers/gpu/drm/msm/disp/dpu1/dpu_hw_catalog.h        |  2 ++
+ 3 files changed, 14 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h
+index 64be51e30..ec0315284 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_5_4_sm6125.h
+@@ -13,6 +13,7 @@ static const struct dpu_caps sm6125_dpu_caps = {
+ 	.max_mixer_blendstages = 0x6,
+ 	.has_dim_layer = true,
+ 	.has_idle_pc = true,
++	.has_prg_fetch_delay = true,
+ 	.max_linewidth = 2160,
+ 	.pixel_ram_size = DEFAULT_PIXEL_RAM_SIZE,
+ 	.max_hdeci_exp = MAX_HORZ_DECIMATION,
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c
+index ba810f26e..15445eaf9 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c
+@@ -237,10 +237,21 @@ static void programmable_fetch_config(struct dpu_encoder_phys *phys_enc,
+ 
+ 	vfp_fetch_lines = programmable_fetch_get_num_lines(phys_enc, timing);
+ 	if (vfp_fetch_lines) {
++		const struct dpu_mdss_cfg *catalog = phys_enc->dpu_kms->catalog;
++
+ 		vert_total = get_vertical_total(timing);
+ 		horiz_total = get_horizontal_total(timing);
+ 		vfp_fetch_start_vsync_counter =
+ 		    (vert_total - vfp_fetch_lines) * horiz_total + 1;
++
++		/*
++		 * SM6125 (DPU 5.4 / Trinket) quirk matching downstream
++		 * delay_prg_fetch_start = true. Throttle fetch start
++		 * to the second line after active video (VFP line 1).
++		 */
++		if (catalog && catalog->caps && catalog->caps->has_prg_fetch_delay)
++			vfp_fetch_start_vsync_counter += horiz_total;
++
+ 		f.enable = 1;
+ 		f.fetch_start = vfp_fetch_start_vsync_counter;
+ 	}
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_hw_catalog.h b/drivers/gpu/drm/msm/disp/dpu1/dpu_hw_catalog.h
+index f45faf873..db3cbf9fa 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_hw_catalog.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_hw_catalog.h
+@@ -273,6 +273,7 @@ struct dpu_rotation_cfg {
+  * @has_dim_layer      dim layer feature status
+  * @has_idle_pc        indicate if idle power collapse feature is supported
+  * @has_3d_merge       indicate if 3D merge is supported
++ * @has_prg_fetch_delay indicate if programmable fetch start requires a 1-line delay
+  * @max_linewidth      max linewidth for sspp
+  * @pixel_ram_size     size of latency hiding and de-tiling buffer in bytes
+  * @max_hdeci_exp      max horizontal decimation supported (max is 2^value)
+@@ -285,6 +286,7 @@ struct dpu_caps {
+ 	bool has_dim_layer;
+ 	bool has_idle_pc;
+ 	bool has_3d_merge;
++	bool has_prg_fetch_delay;
+ 	/* SSPP limits */
+ 	u32 max_linewidth;
+ 	u32 pixel_ram_size;

@@ -14,6 +14,22 @@ mount -t tmpfs tmpfs /run
 mount -t configfs none /sys/kernel/config 2>/dev/null
 mount -t debugfs none /sys/kernel/debug 2>/dev/null
 say() { echo "willow-lite: $*"; echo "willow-lite: $*" > /dev/kmsg; }
+cmdopt() { for arg in $(cat /proc/cmdline); do case "$arg" in "$1"=*) echo "${arg#*=}" ;; esac; done; }
+
+# Dead-man: reboot to the bootloader unless the host connects to tcp/9977 and sends "ok".
+# It outlives switch_root, so it also covers a hung userspace and a missing USB link.
+DEADMAN=$(cmdopt willow_deadman)
+if [ -n "$DEADMAN" ] && [ "$DEADMAN" -gt 0 ] && [ -x /sbin/deadman ]; then
+  /sbin/deadman "$DEADMAN" 9977 &
+  say "deadman armed for ${DEADMAN}s"
+fi
+USBFN=$(cmdopt willow_usb)
+case "$USBFN" in ecm|ncm|rndis) ;; *) USBFN=rndis ;; esac
+WDT=$(cmdopt willow_wdt)
+if [ -n "$WDT" ] && [ "$WDT" -gt 0 ] && [ -e /dev/watchdog ]; then
+  watchdog -t $((WDT / 3)) -T "$WDT" /dev/watchdog
+  say "watchdog petting, bite after ${WDT}s"
+fi
 
 # Keep the framebuffer lit for early boot diagnostics.
 i=0
@@ -53,16 +69,32 @@ case "$ROOTPATH" in
     ;;
 esac
 
+# Load the trial touch module only after the selected root is mounted. Its
+# EBBG firmware is built into the matching RAM-boot kernel image.
+TOUCH=$(cmdopt willow_touch)
+if [ "$TOUCH" = "ebbg-module" ]; then
+  if [ "$ROOTPATH" = "/var/lib/willow-lite-trial" ] && [ -s /lib/modules/novatek-nt36672a-spi.ko ]; then
+    if insmod /lib/modules/novatek-nt36672a-spi.ko; then
+      crumbs "touch module loaded after selecting $ROOTPATH"
+    else
+      crumbs "touch module load failed"
+    fi
+  else
+    crumbs "touch module skipped (trial root or module missing)"
+  fi
+fi
+
 # Bind a visible host USB-network gadget before handing over to systemd.
 G=/sys/kernel/config/usb_gadget/mini
 if mkdir -p "$G" 2>/dev/null && [ -d "$G" ]; then
   echo 0x1d6b > "$G/idVendor"; echo 0x0104 > "$G/idProduct"
-  mkdir -p "$G/strings/0x409" "$G/configs/c.1/strings/0x409" "$G/functions/rndis.usb0"
+  mkdir -p "$G/strings/0x409" "$G/configs/c.1/strings/0x409" "$G/functions/$USBFN.usb0"
   echo moarchy > "$G/strings/0x409/manufacturer"
   echo "willow lite RAM boot" > "$G/strings/0x409/product"
-  echo 02:00:00:00:42:01 > "$G/functions/rndis.usb0/host_addr"
-  echo 02:00:00:00:42:02 > "$G/functions/rndis.usb0/dev_addr"
-  ln -sf "$G/functions/rndis.usb0" "$G/configs/c.1/" 2>/dev/null
+  echo 02:00:00:00:42:01 > "$G/functions/$USBFN.usb0/host_addr"
+  echo 02:00:00:00:42:02 > "$G/functions/$USBFN.usb0/dev_addr"
+  ln -sf "$G/functions/$USBFN.usb0" "$G/configs/c.1/" 2>/dev/null
+  crumbs "usb function $USBFN"
   i=0; UDC=
   while [ -z "$UDC" ] && [ "$i" -lt 60 ]; do UDC=$(ls /sys/class/udc 2>/dev/null | head -1); [ -z "$UDC" ] && sleep 0.5; i=$((i + 1)); done
   if [ -n "$UDC" ]; then echo "$UDC" > "$G/UDC" 2>/dev/null; crumbs "gadget bound to $UDC"; else crumbs "no UDC found"; fi

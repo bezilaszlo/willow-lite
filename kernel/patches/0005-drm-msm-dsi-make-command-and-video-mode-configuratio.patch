@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Y=C4=B0=C4=9E=C4=B0TCAN=20KAVAKLI?=
+ <yigitcan-kavakli@rfc.invalid>
+Date: Tue, 29 Sep 2026 17:22:56 +0200
+Subject: drm/msm/dsi: make command and video mode configuration mutually
+ exclusive
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+RFC 8/10, applied with offsets. Also programs ACTIVE_VSYNC_HPOS as in the RFC.
+Link: https://lore.kernel.org/all/20260911-ginkgo-submission-final-v1-8-0e68e63a18d4@gmail.com
+Signed-off-by: YİĞİTCAN KAVAKLI <yigitcan-kavakli@rfc.invalid>
+---
+ drivers/gpu/drm/msm/dsi/dsi_host.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+index 982abaaac..16b3facc3 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -1090,7 +1090,9 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
+ 		dsi_write(msm_host, REG_DSI_ACTIVE_HSYNC,
+ 			DSI_ACTIVE_HSYNC_START(hs_start) |
+ 			DSI_ACTIVE_HSYNC_END(hs_end));
+-		dsi_write(msm_host, REG_DSI_ACTIVE_VSYNC_HPOS, 0);
++		dsi_write(msm_host, REG_DSI_ACTIVE_VSYNC_HPOS,
++			DSI_ACTIVE_VSYNC_HPOS_START(hs_start) |
++			DSI_ACTIVE_VSYNC_HPOS_END(vs_end));
+ 		dsi_write(msm_host, REG_DSI_ACTIVE_VSYNC_VPOS,
+ 			DSI_ACTIVE_VSYNC_VPOS_START(vs_start) |
+ 			DSI_ACTIVE_VSYNC_VPOS_END(vs_end));
+@@ -1168,8 +1170,10 @@ static void dsi_op_mode_config(struct msm_dsi_host *msm_host,
+ 					DSI_IRQ_MASK_VIDEO_DONE, 0);
+ 	} else {
+ 		if (video_mode) {
++			dsi_ctrl &= ~DSI_CTRL_CMD_MODE_EN;
+ 			dsi_ctrl |= DSI_CTRL_VID_MODE_EN;
+ 		} else {		/* command mode */
++			dsi_ctrl &= ~DSI_CTRL_VID_MODE_EN;
+ 			dsi_ctrl |= DSI_CTRL_CMD_MODE_EN;
+ 			dsi_intr_ctrl(msm_host, DSI_IRQ_MASK_CMD_MDP_DONE, 1);
+ 		}

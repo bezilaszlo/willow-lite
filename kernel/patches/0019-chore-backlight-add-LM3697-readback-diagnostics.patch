@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bezilaszlo <bezilaszlo95@gmail.com>
+Date: Wed, 30 Sep 2026 16:53:17 +0200
+Subject: chore(backlight): add LM3697 readback diagnostics
+
+---
+ drivers/video/backlight/ktd3136.c | 75 +++++++++++++++++++++++++++++--
+ 1 file changed, 71 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/video/backlight/ktd3136.c b/drivers/video/backlight/ktd3136.c
+index 9dfeca0f3..d8925d0cd 100644
+--- a/drivers/video/backlight/ktd3136.c
++++ b/drivers/video/backlight/ktd3136.c
+@@ -34,6 +34,12 @@
+ 
+ #define LM3697_REG_BRT_MSB	0x22
+ #define LM3697_REG_BRT_LSB	0x23
++#define LM3697_REG_READBACK_BRT_LSB	0x22
++#define LM3697_REG_READBACK_BRT_MSB	0x23
++#define LM3697_REG_BANK_ENABLE	0x24
++#define LM3697_REG_OUTPUT_CONFIG	0x10
++#define LM3697_REG_FEEDBACK_ENABLE	0x19
++#define LM3697_REG_PWM_CONFIG	0x1c
+ 
+ #define KTD3136_MAX_BRIGHTNESS	2047
+ #define KTD3136_DEFAULT_BRIGHTNESS 1024
+@@ -87,7 +93,7 @@ static int ktd3136_set_lm3697(struct ktd3136 *ktd, unsigned int brightness)
+ 	int ret;
+ 
+ 	if (!brightness)
+-		return ktd3136_write(ktd, 0x24, 0x00);
++		return ktd3136_write(ktd, LM3697_REG_BANK_ENABLE, 0x00);
+ 
+ 	/*
+ 	 * Probe runs before LCDB/panel power. The first brightness write
+@@ -98,7 +104,7 @@ static int ktd3136_set_lm3697(struct ktd3136 *ktd, unsigned int brightness)
+ 	if (ret)
+ 		return ret;
+ 
+-	/* LSB then MSB; the 11-bit code latches on the second write. */
++	/* Preserve the existing 0x23-then-0x22 sequence for this diagnostic. */
+ 	ret = ktd3136_write(ktd, LM3697_REG_BRT_LSB, brightness & 0xff);
+ 	if (ret)
+ 		return ret;
+@@ -107,23 +113,84 @@ static int ktd3136_set_lm3697(struct ktd3136 *ktd, unsigned int brightness)
+ 	if (ret)
+ 		return ret;
+ 
+-	return ktd3136_write(ktd, 0x24, 0x03);
++	return ktd3136_write(ktd, LM3697_REG_BANK_ENABLE, 0x03);
++}
++
++static int ktd3136_get_brightness(struct backlight_device *bl)
++{
++	struct ktd3136 *ktd = bl_get_data(bl);
++	unsigned int lsb, msb, enable;
++	int ret;
++
++	if (ktd->ic == IC_KTD3136)
++		return bl->props.brightness;
++
++	ret = regmap_read(ktd->regmap, LM3697_REG_BANK_ENABLE, &enable);
++	if (ret)
++		return ret;
++	if (!(enable & BIT(1)))
++		return 0;
++
++	ret = regmap_read(ktd->regmap, LM3697_REG_READBACK_BRT_LSB, &lsb);
++	if (ret)
++		return ret;
++
++	ret = regmap_read(ktd->regmap, LM3697_REG_READBACK_BRT_MSB, &msb);
++	if (ret)
++		return ret;
++
++	return (msb << 3) | (lsb & 0x7);
++}
++
++static void ktd3136_log_lm3697_state(struct ktd3136 *ktd)
++{
++	static const u8 regs[] = {
++		LM3697_REG_OUTPUT_CONFIG,
++		LM3697_REG_FEEDBACK_ENABLE,
++		LM3697_REG_PWM_CONFIG,
++		LM3697_REG_READBACK_BRT_LSB,
++		LM3697_REG_READBACK_BRT_MSB,
++		LM3697_REG_BANK_ENABLE,
++	};
++	unsigned int vals[ARRAY_SIZE(regs)];
++	int i, ret;
++
++	for (i = 0; i < ARRAY_SIZE(regs); i++) {
++		ret = regmap_read(ktd->regmap, regs[i], &vals[i]);
++		if (ret) {
++			dev_warn(&ktd->client->dev,
++				 "LM3697 readback failed at 0x%02x: %d\n",
++				 regs[i], ret);
++			return;
++		}
++	}
++
++	dev_info(&ktd->client->dev,
++		 "LM3697 register readback: 10=%02x 19=%02x 1c=%02x "
++		 "22=%02x 23=%02x 24=%02x (register state only)\n",
++		 vals[0], vals[1], vals[2], vals[3], vals[4], vals[5]);
+ }
+ 
+ static int ktd3136_update_status(struct backlight_device *bl)
+ {
+ 	struct ktd3136 *ktd = bl_get_data(bl);
+ 	unsigned int brightness = backlight_get_brightness(bl);
++	int ret;
+ 
+ 	if (ktd->ic == IC_KTD3136)
+ 		return ktd3136_set_ktd(ktd, brightness);
+ 
+-	return ktd3136_set_lm3697(ktd, brightness);
++	ret = ktd3136_set_lm3697(ktd, brightness);
++	if (!ret)
++		ktd3136_log_lm3697_state(ktd);
++
++	return ret;
+ }
+ 
+ static const struct backlight_ops ktd3136_ops = {
+ 	.options = BL_CORE_SUSPENDRESUME,
+ 	.update_status = ktd3136_update_status,
++	.get_brightness = ktd3136_get_brightness,
+ };
+ 
+ static int ktd3136_init_ktd(struct ktd3136 *ktd)

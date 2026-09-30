@@ -1,0 +1,3 @@
+tag v7.2
+commit 8d3ae59288f1e7d58d76558a6ee96d533bc5019f
+remote https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
