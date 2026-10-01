@@ -4,6 +4,74 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 ShellRoot {
+    property bool powerHoldTriggered: false
+    property bool pressStartedWithMenu: false
+    property bool powerButtonReady: false
+
+    Process {
+        id: powerButton
+        command: ["/usr/local/bin/willow-power-button"]
+        running: true
+        onExited: {
+            powerButtonReady = false;
+            powerHold.stop();
+        }
+        stdout: SplitParser {
+            onRead: data => {
+                if (data === "ready") {
+                    powerButtonReady = true;
+                } else if (data === "down" && powerButtonReady) {
+                    powerHoldTriggered = false;
+                    pressStartedWithMenu = powerMenu.visible;
+                    powerHold.start();
+                } else if (data === "up" && powerButtonReady) {
+                    powerHold.stop();
+                    if (powerHoldTriggered) {
+                        return;
+                    } else if (pressStartedWithMenu) {
+                        powerMenu.visible = false;
+                    } else {
+                        displayToggle.running = true;
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: powerHold
+        interval: 2000
+        onTriggered: {
+            powerHoldTriggered = true;
+            displayWake.running = true;
+            powerMenu.visible = true;
+        }
+    }
+
+    Process {
+        id: displayWake
+        command: ["/usr/local/bin/willow-power-action", "display-on"]
+        running: false
+    }
+
+    Process {
+        id: displayToggle
+        command: ["/usr/local/bin/willow-power-action", "display-toggle"]
+        running: false
+    }
+
+    Process {
+        id: restartRequest
+        command: ["/usr/local/bin/willow-power-action", "restart"]
+        running: false
+    }
+
+    Process {
+        id: powerOff
+        command: ["/usr/local/bin/willow-power-action", "shutdown"]
+        running: false
+    }
+
     Process {
         id: terminal
         command: ["foot"]
@@ -94,6 +162,85 @@ ShellRoot {
                 color: "#3d475b"
                 Text { anchors.centerIn: parent; text: "Keyboard"; color: "white"; font.pixelSize: 15 }
                 MouseArea { anchors.fill: parent; onClicked: keyboard.running = true }
+            }
+        }
+    }
+
+    PanelWindow {
+        id: powerMenu
+        visible: false
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusiveZone: 0
+        color: "#d9111827"
+        WlrLayershell.layer: WlrLayer.Overlay
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 40, 440)
+            height: 410
+            radius: 24
+            color: "#1e293b"
+            border.color: "#475569"
+            border.width: 2
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 14
+
+                Text {
+                    width: parent.width
+                    height: 52
+                    text: "Power"
+                    color: "#f8fafc"
+                    font.pixelSize: 28
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 76
+                    radius: 16
+                    color: "#315c96"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Restart"
+                        color: "white"
+                        font.pixelSize: 22
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            powerMenu.visible = false;
+                            restartRequest.running = true;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 76
+                    radius: 16
+                    color: "#7f1d1d"
+                    Text { anchors.centerIn: parent; text: "Shut down"; color: "white"; font.pixelSize: 22 }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            powerMenu.visible = false;
+                            powerOff.running = true;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 76
+                    radius: 16
+                    color: "#3d475b"
+                    Text { anchors.centerIn: parent; text: "Cancel"; color: "white"; font.pixelSize: 22 }
+                    MouseArea { anchors.fill: parent; onClicked: powerMenu.visible = false }
+                }
             }
         }
     }

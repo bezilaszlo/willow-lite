@@ -2,7 +2,7 @@
 
 Single source of truth for the own-kernel effort. Update it after every step: change the status, add a dated log line, never delete history. Mark anything you did not personally observe as **unverified**.
 
-Last updated: 2026-10-01 (one CTM-enabled DSPP-preallocation Hyprland boot and one DPMS cycle are user-confirmed working; software remained clean through 921 s).
+Last updated: 2026-10-01 (one CTM-enabled DSPP-preallocation Hyprland boot and one DPMS cycle are user-confirmed working; software remained clean through 921 s. Power-key menu was deployed for a user hold/menu check; physical behavior remains unverified.)
 
 ## Goal
 
@@ -13,6 +13,10 @@ End state: panel lit, including after Hyprland starts and takes over DSI without
 ## Baseline and diagnostic history
 
 The user's historical baseline, also reflected in [hardware notes](../docs/hardware.md), is that the original/community kernel with Sway worked; they moved to Hyprland for animations before the own-kernel effort. Hyprland's DSI takeover has had mixed outcomes: some starts were black, while console-inherited/fallback starts could be lit. Do not characterize every Hyprland start as failing. The current own-kernel image has one user-confirmed working Sway boot; the CTM-triggered full-modeset explanation remains a hypothesis. This history is context, not a newly observed result.
+
+## Current power-key menu work
+
+The user requested a menu after a physical power-key hold, with Restart, Shut down, and Cancel. The implementation handles a short press as a Hyprland DPMS toggle and a 2-second hold as the menu; release after the hold does not trigger shutdown. A press beginning while the menu is visible dismisses it; holding wakes the display. Restart uses the phone's normal `systemctl reboot`, so it exits the current RAM-booted kernel and follows the installed boot path. It does not invoke the host RAM-boot wrapper. The input monitor is intended to live with Quickshell; on 2026-10-01 one live process and one `handle-power-key` inhibitor were observed after deployment, but QML-exit cleanup and physical key behavior remain unverified. The displayed menu and reboot/shutdown actions have not been physically tested.
 
 ## Why (decisions already made, do not re-litigate)
 
@@ -25,6 +29,7 @@ The user's historical baseline, also reflected in [hardware notes](../docs/hardw
 ## Hard rules (user set these)
 
 - **RAM boots only**, via `scripts/boot-trial.sh <image>`. The wrapper either accepts exact fastboot serial `e685bd` or makes one SSH reboot-to-bootloader request and waits up to 30 seconds for that exact serial; it then resets the bootloader, rechecks the serial, and invokes one logged `fastboot boot`. Never use fastboot flash/erase/oem or any partition write. Both wrapper paths have been used successfully; the direct SSH-to-fastboot path was first exercised on 2026-10-01.
+- **Power-menu Restart is a normal reboot.** It leaves the current RAM-booted kernel and follows the installed boot path. It is not a RAM-boot trial.
 - Rollback image: `out/boot-willow-lite.img` (community kernel, sha256 `397fd5bd9426a03a30d1f3bbb6902438b1a0cfc151f70574b8f48dd63efe2243` at 2026-09-29). Boot it to restore the phone.
 - **The user does not want to touch the phone or move the camera.** A hung boot that needs the key combo is a stop condition: do not loop reboots; report.
 - Do not unbind/rebind the LM3697/backlight I2C driver or the DRM driver on a live session (past incident: `-28`, fb0 gone). No direct I2C pokes, `fb0/blank` or DPMS off on the community session. No writes to `bl_power` over SSH.
@@ -179,6 +184,10 @@ This section began as the Sonnet prep subagent's handover. Older trial observati
 - Later: hardware for hands-free recovery: 1.8 V UART (TP0003 TX / TP0012 RX) and/or a microcontroller pressing Power / Volume Down.
 
 ## Log
+
+- 2026-10-01: Deployed only `willow.qml`, `willow-power-button`, and `willow-power-action` to the current phone session; no compositor restart or reboot/shutdown command was run. Deployed hashes match source: QML `8d937f268aee9244eebb508319afb5bb2d065e0d0739c1d82dead52e5a87642a`, input helper `9b3a5cf34c20b12a5f52a9f5645f77c14fb8142bd2d2363f8404fc2a5da0dfcd`, action helper `659e1f91075cbac8b1379eaac6ae882edbbed23bca0357f74795d1585b81a2b8`. Read-only check found Hyprland PID 400, Quickshell PID 445, reader PID 1188, and exactly one active `handle-power-key` inhibitor PID 1191; PMIC input node is readable and `sudo -n -l` confirms configured permission without invoking power actions. Relevant recent session logs show no Quickshell/QML errors; existing Hyprland scheduling and XKB warnings remain. One orphan inhibitor tree from an earlier deployment/reload was identified as task-owned and stopped; the current helper tree remains active. Physical press/hold/menu/Cancel and lifecycle cleanup on Quickshell exit are still unverified. Current working desktop remains running.
+
+- 2026-10-01: Implemented an un-deployed Quickshell physical power-key menu in Willow Lite source. The PMIC key monitor uses the existing `input` group and emits key-down/up records; its managed `systemd-inhibit --what=handle-power-key` is designed to stop with the owning Quickshell process, but lifecycle remains unverified. `stdbuf -oL` was added after confirming it exists on the phone so `od` does not buffer key events. Release before 2 s toggles Hyprland DPMS using the already validated `hyprctl eval` off/on API; a 2 s hold wakes the display and opens Restart, Shut down, Cancel, and release after the hold does not power off. Restart and Shutdown invoke `sudo -n systemctl reboot` and `sudo -n systemctl poweroff`; normal reboot leaves a RAM-booted kernel and follows the installed boot path. `systemd-inhibit --help` on the phone lists no `--wait` option, so the helper relies on the command's default wait behavior. `scripts/sync-session.sh` installs helpers before copying auto-reloaded QML. No phone deployment or reboot/shutdown test was done; current working session is unchanged. Shell syntax checks passed; QML and physical input behavior remain unvalidated.
 
 - 2026-10-01: Root-approved one-cycle runtime DPMS discriminator on the existing Hyprland `msm.no_ctm=1` session. Exact supported commands were `hyprctl -i 0 eval 'hl.dispatch(hl.dsp.dpms({ action = "off" }))'`, wait 5 s, then unconditionally `hyprctl -i 0 eval 'hl.dispatch(hl.dsp.dpms({ action = "on" }))'`; both returned 0. SSH remained available; pre/post DSI-1 monitor JSON had `dpmsStatus=true`, `disabled=false`. The exact DCS status count rose 1→2, with the second `0x9c` at 1451.984846 s. At ~99 s post-cycle, uptime was 1545.52 s, Hyprland PID 398 was running, `no_ctm=Y`, monitor active, no matching post-cycle DSI/panel/FIFO/timeout/fail/error/reset lines, and pstore had no files. User confirms the display “seems fully functional” afterward. This is one successful cycle, not repeatability or 3/3 reliability, and does not exclude timing as a factor. Output: `out/hyprland-dpms-cycle-20261001.txt`; no second cycle or reboot.
 

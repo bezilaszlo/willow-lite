@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+case ${1:-} in
+    display-on)
+        exec hyprctl -i 0 eval 'hl.dispatch(hl.dsp.dpms({ action = "on" }))'
+        ;;
+    display-toggle)
+        if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+            if hyprctl -i 0 -j monitors | grep -q '"dpmsStatus": true'; then
+                exec hyprctl -i 0 eval 'hl.dispatch(hl.dsp.dpms({ action = "off" }))'
+            fi
+            exec hyprctl -i 0 eval 'hl.dispatch(hl.dsp.dpms({ action = "on" }))'
+        fi
+        echo 'display toggle is only configured for the Hyprland session' >&2
+        exit 1
+        ;;
+    restart)
+        exec sudo -n systemctl reboot
+        ;;
+    shutdown)
+        exec sudo -n systemctl poweroff
+        ;;
+    *)
+        echo 'usage: willow-power-action display-on|display-toggle|restart|shutdown' >&2
+        exit 2
+        ;;
+esac
