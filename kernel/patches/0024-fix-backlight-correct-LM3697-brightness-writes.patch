@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bezilaszlo <bezilaszlo95@gmail.com>
+Date: Thu, 1 Oct 2026 18:13:08 +0200
+Subject: fix(backlight): correct LM3697 brightness writes
+
+Control B brightness uses LSB register 0x22[2:0] and MSB register
+0x23[7:0]. The LM3697 latches the value when the MSB is written, so
+write the low three bits first and the upper eight bits second. The
+previous driver sent the bytes to the opposite registers and did not
+mask the LSB, producing incorrect hardware brightness values.
+
+The KTD3136 path and LM3697 readback decoding are unchanged.
+
+Fixes: 034e25ff19f4 ("backlight: add Kinetic KTD3136 and TI LM3697 driver")
+Link: https://www.ti.com/lit/gpn/lm3697
+Signed-off-by: bezilaszlo <bezilaszlo95@gmail.com>
+---
+ drivers/video/backlight/ktd3136.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/video/backlight/ktd3136.c b/drivers/video/backlight/ktd3136.c
+index d8925d0cd..7494a420f 100644
+--- a/drivers/video/backlight/ktd3136.c
++++ b/drivers/video/backlight/ktd3136.c
+@@ -32,8 +32,8 @@
+ #define KTD3136_CTRL_LINEAR	BIT(1)
+ #define KTD3136_PWM_DISABLE	0x9b	/* PWM off, CH1+CH2 like 0x1b */
+ 
+-#define LM3697_REG_BRT_MSB	0x22
+-#define LM3697_REG_BRT_LSB	0x23
++#define LM3697_REG_BRT_MSB	0x23
++#define LM3697_REG_BRT_LSB	0x22
+ #define LM3697_REG_READBACK_BRT_LSB	0x22
+ #define LM3697_REG_READBACK_BRT_MSB	0x23
+ #define LM3697_REG_BANK_ENABLE	0x24
+@@ -104,12 +104,12 @@ static int ktd3136_set_lm3697(struct ktd3136 *ktd, unsigned int brightness)
+ 	if (ret)
+ 		return ret;
+ 
+-	/* Preserve the existing 0x23-then-0x22 sequence for this diagnostic. */
+-	ret = ktd3136_write(ktd, LM3697_REG_BRT_LSB, brightness & 0xff);
++	/* The LM3697 latches brightness when the MSB is written. */
++	ret = ktd3136_write(ktd, LM3697_REG_BRT_LSB, brightness & 0x7);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = ktd3136_write(ktd, LM3697_REG_BRT_MSB, (brightness >> 8) & 0x7);
++	ret = ktd3136_write(ktd, LM3697_REG_BRT_MSB, (brightness >> 3) & 0xff);
+ 	if (ret)
+ 		return ret;
+ 
