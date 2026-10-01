@@ -11,6 +11,8 @@ Scope {
     property bool active: false
     property bool powerMenuVisible: false
     property string clockText: "--:--"
+    property string batteryText: "Battery unavailable"
+    property string networkText: "Network unavailable"
     property string dateText: "Date unavailable"
     property string systemText: "System status unavailable"
 
@@ -283,6 +285,8 @@ Scope {
                     awake: root.awake
                     powerMenuVisible: root.powerMenuVisible
                     clockText: root.clockText
+                    batteryText: root.batteryText
+                    networkText: root.networkText
                     dateText: root.dateText
                     systemText: root.systemText
                     swipeOffset: root.swipeOffset

@@ -8,6 +8,8 @@ Item {
     property bool awake: true
     property bool powerMenuVisible: false
     property string clockText: "--:--"
+    property string batteryText: "Battery unavailable"
+    property string networkText: "Network unavailable"
     property string dateText: "Date unavailable"
     property string systemText: "System status unavailable"
     property real swipeOffset: 0
@@ -15,6 +17,10 @@ Item {
     signal restartRequested()
     signal shutdownRequested()
     signal cancelPowerMenuRequested()
+
+    function compactStatus(value, label) {
+        return value.toLowerCase().includes("unavailable") ? label + " unavailable" : value;
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -52,6 +58,80 @@ Item {
         Connections {
             target: ThemeStore
             function onMutedChanged() { dotTexture.requestPaint(); }
+        }
+    }
+
+    Item {
+        id: statusRow
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: 40
+        visible: root.awake
+        z: 5
+
+        Text {
+            x: 24
+            width: 86
+            height: parent.height
+            text: root.clockText
+            color: ThemeStore.brightForeground
+            font.family: ThemeStore.fontFamily
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+            verticalAlignment: Text.AlignVCenter
+            Accessible.name: "Device time " + root.clockText
+        }
+
+        Row {
+            anchors { right: parent.right; rightMargin: 24; top: parent.top; bottom: parent.bottom }
+            spacing: 8
+
+            Text {
+                width: 100
+                height: parent.height
+                text: root.compactStatus(root.networkText, "net")
+                color: ThemeStore.foreground
+                font.family: ThemeStore.fontFamily
+                font.pixelSize: 10
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignVCenter
+                Accessible.name: root.networkText
+            }
+
+            Text {
+                width: 100
+                height: parent.height
+                text: root.compactStatus(root.batteryText, "bat")
+                color: ThemeStore.foreground
+                font.family: ThemeStore.fontFamily
+                font.pixelSize: 10
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignVCenter
+                Accessible.name: root.batteryText
+            }
+        }
+    }
+
+    Rectangle {
+        id: notchPill
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 5
+        width: 30
+        height: 30
+        radius: 16
+        color: "#000000"
+        visible: root.awake
+        z: 6
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 12
+            height: 12
+            radius: 6
+            color: "#182136"
+            border.color: "#293650"
+            border.width: 1
         }
     }
 
