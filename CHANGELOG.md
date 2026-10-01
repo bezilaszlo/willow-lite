@@ -2,6 +2,7 @@
 
 ## 2026-10-01
 - Add a user-started, silent screen recorder to Control Center with a 90-second default, 120-second cap, private output, and a bounded event-timeline sidecar. It refuses to start while the native lock is already active; on-device 8-second auto-expiry and manual-stop captures produced valid video, and host analysis parsed 48 timeline events.
+- Fix recorder startup detection to find the exact `wf-recorder` child through `ps`, and serialize control requests while retiring dead stale state without losing the latest completed clip.
 - Keep Home foreground and block input while native session-lock acquisition is pending, then hand off after `WlSessionLock.secure`. Add a bounded sequence-only event timeline for lock, brightness, power, and terminal/window transitions; physical behavior remains unverified.
 - Route a short power-key release to wake a secure dark lock or dim an awake one; retain the two-second hold menu and expose read-only button event/action counters.
 - Wake the secure lock on the first single touch, including a swipe, while consuming that contact so it cannot also unlock; add a guarded wake-only recovery IPC.

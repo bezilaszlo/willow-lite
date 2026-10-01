@@ -21,3 +21,7 @@ python scripts/analyze-screen-recording.py ~/Videos/Willow/lock-diagnostic-20261
 ```
 
 The analyzer creates up to four compact 30-second contact sheets and a report in a new sibling `*-review` directory. It refuses recordings longer than the helper's bound and will not overwrite an existing review directory. The recording shows compositor output; it cannot establish that the physical panel or backlight was emitting light.
+
+## Verification (2026-10-01)
+
+On the unlocked phone, an 8-second capture auto-expired and returned to `idle` with a retained 7.53-second H.264 file. A 30-second capture stopped manually after about 3 seconds and returned to `idle` with a retained 4.20-second H.264 file. Host-side analysis produced a contact sheet and detail frame and parsed 48 timeline events from the manual-stop sidecar. These checks verify recorder lifecycle and file generation; they do not validate capture while the native lock is active.
