@@ -1,0 +1,188 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bezilaszlo <bezilaszlo95@gmail.com>
+Date: Thu, 1 Oct 2026 09:54:10 +0200
+Subject: fix(drm/msm): retain DSPP resources for CTM updates
+
+Adapt the DPU resource-allocation changes from Dmitry Baryshkov's v3
+series: clear stale DSPP pointers and avoid resource reassignment when
+an encoder is not being reprogrammed. Move the first-DSPP modeset check
+into DPU, where the resource requirement is known.
+
+Add a default-off, DSI-only msm.dspp_prealloc experiment for SM6125.
+Failed optional reservations are released from the cloned atomic global
+state before retrying the unchanged topology. This keeps CTM exposed; it
+is an experiment, not a generic policy or an upstream fix.
+
+Link: https://lists.openwall.net/linux-kernel/2026/09/12/520
+Link: https://lists.openwall.net/linux-kernel/2026/09/12/522
+---
+ drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c | 78 ++++++++++++++++++++++--
+ drivers/gpu/drm/msm/msm_atomic.c         | 17 +-----
+ 2 files changed, 73 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c
+index 6b6c44fef..d4d39de7b 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c
+@@ -46,6 +46,10 @@ static bool no_ctm;
+ module_param_named(no_ctm, no_ctm, bool, 0444);
+ MODULE_PARM_DESC(no_ctm, "Disable DPU CRTC CTM property for diagnostic testing");
+ 
++static bool dspp_prealloc;
++module_param_named(dspp_prealloc, dspp_prealloc, bool, 0444);
++MODULE_PARM_DESC(dspp_prealloc, "Best-effort DSPP preallocation for DSI testing");
++
+ #define	CONVERT_S3_15(val) \
+ 	(((((u64)val) & ~BIT_ULL(63)) >> 17) & GENMASK_ULL(17, 0))
+ 
+@@ -1434,6 +1438,29 @@ static struct msm_display_topology dpu_crtc_get_topology(
+ 	return topology;
+ }
+ 
++static bool dpu_crtc_should_prealloc_dspp(struct drm_crtc *crtc,
++		struct dpu_kms *dpu_kms,
++		struct drm_crtc_state *crtc_state,
++		struct msm_display_topology *topology)
++{
++	struct drm_encoder *drm_enc;
++	bool has_dsi_encoder = false;
++
++	if (!dspp_prealloc || crtc_state->ctm || crtc_state->gamma_lut ||
++	    topology->num_dspp || topology->num_dsc || topology->cwb_enabled ||
++	    topology->num_lm > dpu_kms->catalog->dspp_count)
++		return false;
++
++	drm_for_each_encoder_mask(drm_enc, crtc->dev, crtc_state->encoder_mask) {
++		if (drm_enc->encoder_type != DRM_MODE_ENCODER_DSI)
++			return false;
++
++		has_dsi_encoder = true;
++	}
++
++	return has_dsi_encoder;
++}
++
+ static int dpu_crtc_assign_resources(struct drm_crtc *crtc,
+ 				     struct drm_crtc_state *crtc_state)
+ {
+@@ -1445,6 +1472,7 @@ static int dpu_crtc_assign_resources(struct drm_crtc *crtc,
+ 	struct dpu_global_state *global_state;
+ 	struct dpu_crtc_state *cstate;
+ 	struct msm_display_topology topology;
++	struct msm_display_topology prealloc_topology;
+ 	int ret;
+ 
+ 	/*
+@@ -1460,8 +1488,22 @@ static int dpu_crtc_assign_resources(struct drm_crtc *crtc,
+ 		return 0;
+ 
+ 	topology = dpu_crtc_get_topology(crtc, dpu_kms, crtc_state);
+-	ret = dpu_rm_reserve(&dpu_kms->rm, global_state,
+-			     crtc_state->crtc, &topology);
++	if (dpu_crtc_should_prealloc_dspp(crtc, dpu_kms, crtc_state,
++					  &topology)) {
++		prealloc_topology = topology;
++		prealloc_topology.num_dspp = prealloc_topology.num_lm;
++		ret = dpu_rm_reserve(&dpu_kms->rm, global_state,
++				     crtc_state->crtc, &prealloc_topology);
++		if (ret) {
++			/* Failed reservations can leave partial mappings in this state. */
++			dpu_rm_release(global_state, crtc);
++			ret = dpu_rm_reserve(&dpu_kms->rm, global_state,
++					     crtc_state->crtc, &topology);
++		}
++	} else {
++		ret = dpu_rm_reserve(&dpu_kms->rm, global_state,
++				     crtc_state->crtc, &topology);
++	}
+ 	if (ret)
+ 		return ret;
+ 
+@@ -1485,8 +1527,8 @@ static int dpu_crtc_assign_resources(struct drm_crtc *crtc,
+ 
+ 		cstate->mixers[i].hw_lm = to_dpu_hw_mixer(hw_lm[i]);
+ 		cstate->mixers[i].lm_ctl = to_dpu_hw_ctl(hw_ctl[ctl_idx]);
+-		if (i < num_dspp)
+-			cstate->mixers[i].hw_dspp = to_dpu_hw_dspp(hw_dspp[i]);
++		cstate->mixers[i].hw_dspp = i < num_dspp ?
++			to_dpu_hw_dspp(hw_dspp[i]) : NULL;
+ 	}
+ 
+ 	cstate->num_mixers = num_lm;
+@@ -1494,6 +1536,26 @@ static int dpu_crtc_assign_resources(struct drm_crtc *crtc,
+ 	return 0;
+ }
+ 
++static bool dpu_crtc_needs_dspp(const struct drm_crtc_state *crtc_state)
++{
++	return crtc_state->ctm || crtc_state->gamma_lut;
++}
++
++static bool dpu_crtc_has_dspp(const struct drm_crtc_state *crtc_state)
++{
++	const struct dpu_crtc_state *cstate = to_dpu_crtc_state(crtc_state);
++	unsigned int i;
++
++	if (!cstate->num_mixers)
++		return false;
++
++	for (i = 0; i < cstate->num_mixers; i++)
++		if (!cstate->mixers[i].hw_dspp)
++			return false;
++
++	return true;
++}
++
+ /**
+  * dpu_crtc_check_mode_changed: check if full modeset is required
+  * @old_crtc_state:	Previous CRTC state
+@@ -1511,6 +1573,11 @@ int dpu_crtc_check_mode_changed(struct drm_crtc_state *old_crtc_state,
+ 
+ 	DRM_DEBUG_ATOMIC("%d\n", crtc->base.id);
+ 
++	/* DSPPs are only reserved during a modeset. */
++	if (dpu_crtc_needs_dspp(new_crtc_state) &&
++	    !dpu_crtc_has_dspp(old_crtc_state))
++		new_crtc_state->mode_changed = true;
++
+ 	/* there might be cases where encoder needs a modeset too */
+ 	drm_for_each_encoder_mask(drm_enc, crtc->dev, new_crtc_state->encoder_mask) {
+ 		if (dpu_encoder_needs_modeset(drm_enc, new_crtc_state->state))
+@@ -1540,8 +1607,7 @@ static int dpu_crtc_atomic_check(struct drm_crtc *crtc,
+ 	bool needs_dirtyfb = dpu_crtc_needs_dirtyfb(crtc_state);
+ 
+ 	/* don't reallocate resources if only ACTIVE has beeen changed */
+-	if (crtc_state->mode_changed || crtc_state->connectors_changed ||
+-	    crtc_state->color_mgmt_changed) {
++	if (crtc_state->mode_changed || crtc_state->connectors_changed) {
+ 		rc = dpu_crtc_assign_resources(crtc, crtc_state);
+ 		if (rc < 0)
+ 			return rc;
+diff --git a/drivers/gpu/drm/msm/msm_atomic.c b/drivers/gpu/drm/msm/msm_atomic.c
+index a8babf1db..7b480981b 100644
+--- a/drivers/gpu/drm/msm/msm_atomic.c
++++ b/drivers/gpu/drm/msm/msm_atomic.c
+@@ -185,22 +185,7 @@ int msm_atomic_check(struct drm_device *dev, struct drm_atomic_commit *state)
+ {
+ 	struct msm_drm_private *priv = dev->dev_private;
+ 	struct msm_kms *kms = priv->kms;
+-	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+-	struct drm_crtc *crtc;
+-	int i, ret = 0;
+-
+-	/*
+-	 * FIXME: stop setting allow_modeset and move this check to the DPU
+-	 * driver.
+-	 */
+-	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state,
+-				      new_crtc_state, i) {
+-		if ((old_crtc_state->ctm && !new_crtc_state->ctm) ||
+-		    (!old_crtc_state->ctm && new_crtc_state->ctm)) {
+-			new_crtc_state->mode_changed = true;
+-			state->allow_modeset = true;
+-		}
+-	}
++	int ret = 0;
+ 
+ 	if (kms && kms->funcs && kms->funcs->check_mode_changed)
+ 		ret = kms->funcs->check_mode_changed(kms, state);
