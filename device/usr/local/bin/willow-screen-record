@@ -1,0 +1,289 @@
+#!/bin/sh
+# User-started, bounded screen recording for Willow lock/content diagnostics.
+set -eu
+
+max_seconds=120
+default_seconds=90
+runtime_base=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+runtime_dir=$runtime_base/willow-screen-record
+lock_marker=$runtime_base/willow-session-locked
+state_file=$runtime_dir/state
+file_state=$runtime_dir/file
+last_file=$runtime_dir/last-file
+worker_marker=$runtime_dir/worker.pid
+recorder_marker=$runtime_dir/recorder.pid
+
+mkdir -p -- "$runtime_dir"
+chmod 700 "$runtime_dir"
+
+emit_status() {
+    printf 'state=%s\nfile=%s\nremaining_seconds=%s\nmax_seconds=%s\nsecure=%s\n' "$1" "$2" "$3" "$max_seconds" "$4"
+}
+
+state_values() {
+    state=idle file=none deadline=0 pid= recording_file=
+    if [ -r "$state_file" ]; then
+        IFS=' ' read -r state pid deadline < "$state_file" || true
+        if [ -r "$file_state" ]; then IFS= read -r file < "$file_state" || true; fi
+    elif [ -r "$last_file" ]; then
+        IFS= read -r file < "$last_file" || true
+    fi
+    recording_file=$file
+}
+
+valid_worker() {
+    [ -r "$worker_marker" ] || return 1
+    IFS= read -r worker_pid < "$worker_marker" || return 1
+    case $worker_pid in ''|*[!0-9]*) return 1 ;; esac
+    [ -r "/proc/$worker_pid/cmdline" ] || return 1
+    [ "$(stat -c %u "/proc/$worker_pid" 2>/dev/null)" = "$(id -u)" ] || return 1
+    IFS=' ' read -r state state_pid _ < "$state_file" || return 1
+    [ "$state_pid" = "$worker_pid" ] || return 1
+    tr '\000' ' ' < "/proc/$worker_pid/cmdline" | grep -Fq "$0 __worker"
+}
+
+worker_alive() {
+    valid_worker || return 1
+    [ "$(cat "$worker_marker")" = "$$" ]
+}
+
+secure_flag() { [ ! -e "$lock_marker" ] || return 0; return 1; }
+
+mono_seconds() { awk 'NR == 1 { print int($1) }' /proc/uptime; }
+
+owned_recorder_alive() {
+    check_pid=${recorder_pid:-}
+    if [ -z "$check_pid" ] && [ -r "$recorder_marker" ]; then IFS= read -r check_pid < "$recorder_marker" || true; fi
+    if [ -z "${worker_pid:-}" ] && [ -r "$worker_marker" ]; then IFS= read -r worker_pid < "$worker_marker" || true; fi
+    case $check_pid in ''|*[!0-9]*) return 1 ;; esac
+    [ -r "/proc/$check_pid/cmdline" ] || return 1
+    [ "$(stat -c %u "/proc/$check_pid" 2>/dev/null)" = "$(id -u)" ] || return 1
+    command_line=$(tr '\000' ' ' < "/proc/$check_pid/cmdline")
+    parent=$(ps -o ppid= -p "$check_pid" 2>/dev/null | tr -d ' ')
+    [ "$parent" = "${worker_pid:-$$}" ] \
+        && case $command_line in /usr/bin/timeout\ *"/usr/bin/wf-recorder"*"-f $recording_file"*) return 0 ;; esac
+    return 1
+}
+
+owned_capture_ready() {
+    owned_recorder_alive || return 1
+    for child_pid in $(cat "/proc/$check_pid/task/$check_pid/children" 2>/dev/null); do
+        case $child_pid in ''|*[!0-9]*) continue ;; esac
+        [ -r "/proc/$child_pid/cmdline" ] || continue
+        [ "$(stat -c %u "/proc/$child_pid" 2>/dev/null)" = "$(id -u)" ] || continue
+        child_command=$(tr '\000' ' ' < "/proc/$child_pid/cmdline")
+        child_parent=$(ps -o ppid= -p "$child_pid" 2>/dev/null | tr -d ' ')
+        [ "$child_parent" = "$check_pid" ] \
+            && case $child_command in /usr/bin/wf-recorder\ *"-f $recording_file"*|wf-recorder\ *"-f $recording_file"*) return 0 ;; esac
+    done
+    return 1
+}
+
+stop_recorder() {
+    [ -n "${recorder_pid:-}" ] || return 0
+    if owned_recorder_alive; then
+        if ! owned_capture_ready; then return 1; fi
+        kill -INT "$child_pid" 2>/dev/null || true
+        count=0
+        while owned_recorder_alive && [ "$count" -lt 7 ]; do sleep 1; count=$((count + 1)); done
+    fi
+    if owned_recorder_alive; then return 1; fi
+    if [ -r "/proc/$recorder_pid/stat" ]; then
+        proc_state=$(ps -o stat= -p "$recorder_pid" 2>/dev/null | tr -d ' ')
+        case $proc_state in Z*) ;; *) return 1 ;; esac
+    fi
+    wait "$recorder_pid" 2>/dev/null || true
+    recorder_pid=
+}
+
+request_stop() { stop_recorder || true; }
+
+write_timeline() {
+    video=$1
+    command -v qs >/dev/null 2>&1 || return 0
+    timeline_tmp=$video.events.json.tmp
+    for qs_pid in $(ps -u "$(id -u)" -o pid=,comm= | awk '$2 == "qs" || $2 == "quickshell" {print $1}' | tail -n 4); do
+        if timeout 2s qs ipc --pid "$qs_pid" prop get willow eventTimelineJson > "$timeline_tmp" 2>/dev/null \
+            && [ -s "$timeline_tmp" ] && [ "$(wc -c < "$timeline_tmp")" -le 65536 ]; then
+            timeline=$(cat "$timeline_tmp")
+            if [ "${timeline#\[}" != "$timeline" ] && [ "${timeline%\]}" != "$timeline" ]; then
+                printf '%s' "$timeline" > "$timeline_tmp.normalized"
+                if [ "$(wc -c < "$timeline_tmp.normalized")" -le 65536 ]; then
+                    chmod 600 "$timeline_tmp.normalized"
+                    mv -f -- "$timeline_tmp.normalized" "$video.events.json"
+                    rm -f -- "$timeline_tmp"
+                    return 0
+                fi
+            fi
+        fi
+    done
+    rm -f -- "$timeline_tmp"
+}
+
+finish_worker() {
+    if ! stop_recorder; then return 1; fi
+    if [ -s "$video_file" ]; then
+        write_timeline "$video_file"
+        printf '%s\n' "$video_file" > "$last_file.tmp"
+        mv -f -- "$last_file.tmp" "$last_file"
+    fi
+    if worker_alive; then
+        rm -f -- "$state_file" "$file_state" "$worker_marker" "$recorder_marker"
+        rmdir "$runtime_dir/starting" 2>/dev/null || true
+    fi
+}
+
+worker() {
+    duration=$1 video_file=$2
+    case $duration in ''|*[!0-9]*) return 2 ;; esac
+    [ "$duration" -ge 1 ] && [ "$duration" -le "$max_seconds" ] || return 2
+    expected_dir=${XDG_VIDEOS_DIR:-$HOME/Videos}/Willow
+    case $video_file in "$expected_dir"/lock-diagnostic-*.mp4) ;; *) return 2 ;; esac
+    [ -f "$video_file" ] && [ ! -s "$video_file" ] || return 2
+    recorder_pid=
+    trap request_stop INT TERM HUP
+    umask 077
+    printf '%s\n' "$$" > "$worker_marker.tmp"
+    mv -f -- "$worker_marker.tmp" "$worker_marker"
+    start_mono=$(mono_seconds)
+    deadline=$((start_mono + duration))
+    printf '%s\n' "$video_file" > "$file_state.tmp"
+    mv -f -- "$file_state.tmp" "$file_state"
+    recording_file=$video_file
+    printf 'recording %s %s\n' "$$" "$deadline" > "$state_file.tmp"
+    mv -f -- "$state_file.tmp" "$state_file"
+    : > "$runtime_dir/recorder.log"
+    chmod 600 "$runtime_dir/recorder.log"
+    /usr/bin/timeout --signal=INT --kill-after=5s "${duration}s" /usr/bin/wf-recorder -y -r 15 -c libx264 -p preset=ultrafast -p crf=25 -p maxrate=2M -p bufsize=4M -f "$video_file" >> "$runtime_dir/recorder.log" 2>&1 &
+    recorder_pid=$!
+    printf '%s\n' "$recorder_pid" > "$recorder_marker"
+    startup_wait=0
+    while ! owned_capture_ready && [ "$startup_wait" -lt 5 ]; do sleep 1; startup_wait=$((startup_wait + 1)); done
+    if ! owned_capture_ready; then
+        printf 'stalled %s %s\n' "$$" "$deadline" > "$state_file.tmp"
+        mv -f -- "$state_file.tmp" "$state_file"
+        exit 1
+    fi
+    rmdir "$runtime_dir/starting" 2>/dev/null || true
+    while owned_recorder_alive; do
+        now=$(mono_seconds)
+        if [ "$now" -ge $((deadline + 8)) ]; then
+            printf 'stalled %s %s\n' "$$" "$deadline" > "$state_file.tmp"
+            mv -f -- "$state_file.tmp" "$state_file"
+            exit 1
+        fi
+        size=$(stat -c %s "$video_file" 2>/dev/null || echo 0)
+        if [ "$size" -ge 104857600 ]; then request_stop; fi
+        sleep 1
+    done
+    trap - INT TERM HUP
+    if ! stop_recorder; then
+        printf 'stalled %s %s\n' "$$" "$deadline" > "$state_file.tmp"
+        mv -f -- "$state_file.tmp" "$state_file"
+        exit 1
+    fi
+    finish_worker
+    return 0
+}
+
+    case ${1:-} in
+    __worker)
+        [ "$#" -eq 3 ] || exit 2
+        worker "$2" "$3"
+        ;;
+    status)
+        state_values
+        if [ "$state" = stalled ]; then
+            emit_status unavailable "$file" 0 0
+        elif [ "$state" = recording ] && valid_worker && owned_capture_ready; then
+            now=$(mono_seconds)
+            remaining=$((deadline - now)); [ "$remaining" -gt 0 ] || remaining=0
+            secure=0; secure_flag && secure=1
+            emit_status recording "$file" "$remaining" "$secure"
+        elif [ "$state" = recording ]; then
+            emit_status unavailable "$file" 0 0
+        elif secure_flag; then
+            emit_status locked none 0 1
+        else
+            emit_status idle "$file" 0 0
+        fi
+        ;;
+    start)
+        if [ -e "$lock_marker" ]; then emit_status locked none 0 1; exit 3; fi
+        [ -x /usr/bin/wf-recorder ] || { emit_status unavailable none 0 0; exit 1; }
+        seconds=${2:-$default_seconds}
+        case $seconds in ''|*[!0-9]*) emit_status unavailable none 0 0; exit 2 ;; esac
+        [ "$seconds" -ge 1 ] || seconds=1
+        [ "$seconds" -le "$max_seconds" ] || seconds=$max_seconds
+        state_values
+        if [ "$state" = stalled ]; then emit_status unavailable "$file" 0 0; exit 1; fi
+        if valid_worker && owned_capture_ready; then
+            now=$(mono_seconds); remaining=$((deadline - now)); [ "$remaining" -gt 0 ] || remaining=0
+            secure=0; secure_flag && secure=1
+            emit_status recording "$file" "$remaining" "$secure"
+            exit 0
+        fi
+        if ! mkdir "$runtime_dir/starting" 2>/dev/null; then
+            emit_status unavailable none 0 0; exit 1
+        fi
+        out_dir=${XDG_VIDEOS_DIR:-$HOME/Videos}/Willow
+        if [ ! -d "$out_dir" ] && ! (umask 077; mkdir -p -- "$out_dir"); then
+            rmdir "$runtime_dir/starting"; emit_status unavailable none 0 0; exit 1
+        fi
+        available_kb=$(df -Pk "$out_dir" 2>/dev/null | awk 'NR==2 {print $4}') || available_kb=0
+        case $available_kb in ''|*[!0-9]*) available_kb=0 ;; esac
+        if [ "$available_kb" -lt 153600 ]; then rmdir "$runtime_dir/starting"; emit_status unavailable none 0 0; exit 1; fi
+        stamp=$(date +%Y%m%d-%H%M%S)
+        video_file=$(umask 077; mktemp "$out_dir/lock-diagnostic-$stamp-XXXXXX.mp4") || {
+            rmdir "$runtime_dir/starting"; emit_status unavailable none 0 0; exit 1;
+        }
+        if ! chmod 600 "$video_file"; then
+            rm -f -- "$video_file"; rmdir "$runtime_dir/starting"; emit_status unavailable none 0 0; exit 1
+        fi
+        "$0" __worker "$seconds" "$video_file" </dev/null >/dev/null 2>&1 &
+        child=$!
+        attempt=0
+        while [ "$attempt" -lt 7 ] && { ! valid_worker || ! owned_capture_ready; }; do sleep 1; attempt=$((attempt + 1)); done
+        if valid_worker && owned_capture_ready; then
+            secure=0; secure_flag && secure=1
+            printf 'state=recording\nfile=%s\nremaining_seconds=%s\nmax_seconds=%s\nsecure=%s\n' "$video_file" "$seconds" "$max_seconds" "$secure"
+            exit 0
+        fi
+        state_values
+        if [ "$state" != stalled ] && ! valid_worker && ! kill -0 "$child" 2>/dev/null; then
+            rm -f -- "$video_file"
+            rm -f -- "$state_file" "$file_state" "$worker_marker" "$recorder_marker"
+            rmdir "$runtime_dir/starting" 2>/dev/null || true
+            emit_status unavailable none 0 0
+        else
+            emit_status unavailable "$video_file" 0 0
+        fi
+        exit 1
+        ;;
+stop)
+        state_values
+        if [ "$state" = stalled ]; then emit_status unavailable "$file" 0 0; exit 1; fi
+        if valid_worker; then
+            IFS= read -r worker_pid < "$worker_marker"
+            kill -TERM "$worker_pid" 2>/dev/null || true
+            attempt=0
+            while valid_worker && [ "$attempt" -lt 15 ]; do sleep 1; attempt=$((attempt + 1)); done
+            if valid_worker; then
+                state_values
+                now=$(mono_seconds); remaining=$((deadline - now)); [ "$remaining" -gt 0 ] || remaining=0
+                secure=0; secure_flag && secure=1
+                emit_status recording "$file" "$remaining" "$secure"
+                exit 1
+            fi
+        elif [ -e "$runtime_dir/starting" ]; then
+            emit_status unavailable none 0 0; exit 1
+        fi
+        state_values
+        secure=0; secure_flag && secure=1
+        emit_status idle "$file" 0 "$secure"
+        ;;
+    *)
+        echo 'usage: willow-screen-record start [SECONDS] | stop | status' >&2
+        exit 2
+        ;;
+esac
