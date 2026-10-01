@@ -6,7 +6,7 @@ The touchscreen is mapped to the single display. Sway's `bindgesture` is touchpa
 |---|---|---|
 | Exactly three fingers down | Save a full-screen PNG to `~/Pictures/Screenshots/`, flash the screen, show a "Screenshot saved" notice. One, two, or four fingers do not trigger it. | User confirmed screenshot worked; finger-count exclusions unverified |
 | Pull from the left or right edge | Cancellable Back. See below. | User confirmed one left-edge swipe worked; cancel/right-edge behavior unverified |
-| Swipe up from the bottom edge | Open the running-app selector; its panel follows the finger. Tap a card to focus it, or swipe that card up to close it. Choose Home to return to the launcher. | First attempt missed because the strip was above wvkbd; corrected masked physical-bottom region deployed, retest pending |
+| Swipe up from the bottom edge | Open the running-app selector; its panel follows the finger. Tap a card to focus it, or swipe that card up to close it. Choose Home to return to the launcher. | The first strip sat above wvkbd. It is now a 30px Overlay at the physical bottom above Top-layer wvkbd; its area overlaps the keyboard's bottom 30px. Physical swipe and bottom-row key access retest pending |
 
 ## Back
 

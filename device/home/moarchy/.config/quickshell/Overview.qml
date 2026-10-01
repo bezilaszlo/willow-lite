@@ -282,18 +282,12 @@ Scope {
     // The bottom-edge strip owns only its own touch surface; progress stays tied to the finger.
     PanelWindow {
         id: edge
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors { bottom: true; left: true; right: true }
+        implicitHeight: 30
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "willow-edge"
-        mask: Region { item: gestureBand }
-
-        Item {
-            id: gestureBand
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-            height: 30
-        }
 
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
