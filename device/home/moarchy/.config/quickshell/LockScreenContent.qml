@@ -21,6 +21,40 @@ Item {
         color: root.dark ? "#000000" : ThemeStore.darkerBackground
     }
 
+    Canvas {
+        id: dotTexture
+        anchors.fill: parent
+        visible: !root.dark
+        renderStrategy: Canvas.Cooperative
+
+        function paintTexture() {
+            const context = getContext("2d");
+            context.clearRect(0, 0, width, height);
+            context.fillStyle = ThemeStore.muted;
+
+            for (let y = 12; y < height; y += 24) {
+                const fade = 1 - y / height;
+                context.globalAlpha = 0.16 * fade * fade;
+                for (let x = 12; x < width; x += 24) {
+                    context.beginPath();
+                    context.arc(x, y, 1, 0, Math.PI * 2);
+                    context.fill();
+                }
+            }
+
+            context.globalAlpha = 1;
+        }
+
+        onPaint: paintTexture()
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+
+        Connections {
+            target: ThemeStore
+            function onMutedChanged() { dotTexture.requestPaint(); }
+        }
+    }
+
     Item {
         width: parent.width
         height: parent.height
@@ -28,7 +62,7 @@ Item {
 
         Item {
             x: 24
-            y: 112
+            y: 103
             width: parent.width - 68
             height: 342
             visible: root.awake
@@ -67,7 +101,7 @@ Item {
 
         Text {
             x: 34
-            y: 477
+            y: 470
             width: parent.width - 68
             visible: root.awake
             text: root.dateText.toLowerCase()
@@ -79,7 +113,7 @@ Item {
 
         Text {
             x: 34
-            y: 514
+            y: 510
             width: parent.width - 68
             text: root.systemText
             color: ThemeStore.darkForeground
@@ -89,19 +123,19 @@ Item {
             visible: root.awake
         }
 
-        Row {
+        Column {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 54
-            spacing: 12
+            spacing: 3
             visible: root.awake && !root.powerMenuVisible
 
             Text {
-                text: "↑"
+                text: "⌃"
                 color: ThemeStore.accent
                 font.family: ThemeStore.fontFamily
-                font.pixelSize: 19
-                anchors.verticalCenter: parent.verticalCenter
+                font.pixelSize: 18
+                anchors.horizontalCenter: parent.horizontalCenter
             }
 
             Text {
@@ -110,7 +144,7 @@ Item {
                 font.family: ThemeStore.fontFamily
                 font.pixelSize: 13
                 font.letterSpacing: 1.0
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.horizontalCenter: parent.horizontalCenter
             }
         }
 
