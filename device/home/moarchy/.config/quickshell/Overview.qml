@@ -283,7 +283,6 @@ Scope {
     PanelWindow {
         id: edge
         anchors { top: true; bottom: true; left: true; right: true }
-        exclusiveZone: 0
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
