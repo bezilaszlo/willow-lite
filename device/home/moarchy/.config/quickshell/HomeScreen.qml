@@ -14,6 +14,10 @@ Scope {
     property var runningApps: []
     property var frequentApps: []
     property var applications: []
+    property int waitingForUnlockFrame: 0
+    property int presentedFrameCount: 0
+    property int unlockFrameBaseline: 0
+    property var presentationWindow: null
 
     signal drawerRequested()
     signal terminalRequested()
@@ -24,8 +28,25 @@ Scope {
     signal appRequested(var entry)
     signal runningAppRequested(var app)
     signal commandRequested(string text)
+    signal unlockFramePresented(int requestId)
 
     function appName(app) { return typeof app === "string" ? app : (app.name || "App") }
+    function requestUnlockFrame(requestId) {
+        unlockFrameBaseline = presentedFrameCount
+        waitingForUnlockFrame = requestId
+        if (presentationWindow)
+            presentationWindow.update()
+    }
+    function cancelUnlockFrame(requestId) {
+        if (waitingForUnlockFrame === requestId)
+            waitingForUnlockFrame = 0
+    }
+    function updatePresentationWindow(window) {
+        if (window !== undefined)
+            presentationWindow = window
+        if (waitingForUnlockFrame !== 0 && presentationWindow)
+            presentationWindow.update()
+    }
     function resolvedSystemText() {
         if (systemText) return systemText
         return [batteryText, networkText].filter(value => value).join("  ")
@@ -50,6 +71,8 @@ Scope {
         WlrLayershell.namespace: "willow-home"
 
         Item {
+            id: homeContent
+            onWindowChanged: window => root.updatePresentationWindow(window)
             anchors.fill: parent
             Canvas {
                 anchors.fill: parent
@@ -224,6 +247,19 @@ Scope {
                     if (entry) root.appRequested(entry)
                     else root.commandRequested(root.appName(app))
                 }
+            }
+        }
+    }
+
+    Connections {
+        target: root.presentationWindow
+        function onFrameSwapped() {
+            root.presentedFrameCount++
+            if (root.visible && root.waitingForUnlockFrame !== 0
+                    && root.presentedFrameCount > root.unlockFrameBaseline) {
+                const requestId = root.waitingForUnlockFrame
+                root.waitingForUnlockFrame = 0
+                root.unlockFramePresented(requestId)
             }
         }
     }

@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-10-01
+- Gate native lock release on an actual Home-layer `QQuickWindow.frameSwapped` after Home is staged behind `WlSessionLock`; cancel the handoff if the lock dims or the request becomes stale, and keep the session locked on timeout. The isolated 540×1170 host probe received a rendered Home frame; physical unlock behavior still needs user confirmation.
+- Keep the Record button's busy state tied to the user action rather than its background status poll, and reconcile queued taps against fresh recorder state. The full shell loaded in the isolated host compositor and the change is deployed; the user should retest the button.
 - Add a user-started, silent screen recorder to Control Center with a 90-second default, 120-second cap, private output, and a bounded event-timeline sidecar. It refuses to start while the native lock is already active; on-device 8-second auto-expiry and manual-stop captures produced valid video, and host analysis parsed 48 timeline events.
 - Fix recorder startup detection to find the exact `wf-recorder` child through `ps`, and serialize control requests while retiring dead stale state without losing the latest completed clip.
 - Keep Home foreground and block input while native session-lock acquisition is pending, then hand off after `WlSessionLock.secure`. Add a bounded sequence-only event timeline for lock, brightness, power, and terminal/window transitions; physical behavior remains unverified.

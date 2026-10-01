@@ -39,6 +39,7 @@ ShellRoot {
     property int screenRecordingRemaining: 0
     property int screenRecordingMaximum: 120
     property bool screenRecordingActionPending: false
+    property string queuedRecordingTarget: ""
     property int brightness: 0
     property int maximumBrightness: 0
     property bool brightnessAvailable: false
@@ -95,21 +96,45 @@ ShellRoot {
             pillMessage = "Screen recording is disabled in preview";
             return;
         }
-        if (screenRecordingActionPending || screenRecordingAction.running || screenRecordingStatus.running)
+        if (screenRecordingActionPending || screenRecordingAction.running)
             return;
-        if (screenRecordingState === "recording") {
-            screenRecordingAction.command = [helperPath("willow-screen-record"), "stop"];
-            screenRecordingActionPending = true;
-            screenRecordingAction.running = true;
-            recordEvent("screen-record.stop-request", "");
-        } else if (screenRecordingState === "idle") {
-            screenRecordingAction.command = [helperPath("willow-screen-record"), "start"];
-            screenRecordingActionPending = true;
-            screenRecordingAction.running = true;
-            recordEvent("screen-record.start-request", "");
-        } else {
+        if (screenRecordingState !== "recording" && screenRecordingState !== "idle") {
             refreshScreenRecording();
+            return;
         }
+        if (screenRecordingStatus.running) {
+            // Keep the tap's intent, then reconcile it with the in-flight fresh status.
+            queuedRecordingTarget = screenRecordingState;
+            recordEvent("screen-record.toggle-queued", "target=" + queuedRecordingTarget);
+            return;
+        }
+        requestScreenRecordingAction(screenRecordingState);
+    }
+    function requestScreenRecordingAction(targetState) {
+        if (lock.active || lockAcquiring || previewMode
+                || screenRecordingActionPending || screenRecordingAction.running
+                || (targetState !== "idle" && targetState !== "recording")
+                || screenRecordingState !== targetState)
+            return;
+        screenRecordingAction.command = [helperPath("willow-screen-record"),
+            targetState === "recording" ? "stop" : "start"];
+        screenRecordingActionPending = true;
+        screenRecordingAction.running = true;
+        recordEvent(targetState === "recording" ? "screen-record.stop-request" : "screen-record.start-request", "");
+    }
+    function finishQueuedRecordingToggle(exitCode) {
+        if (!queuedRecordingTarget)
+            return;
+        const target = queuedRecordingTarget;
+        queuedRecordingTarget = "";
+        if (exitCode !== 0) {
+            pillMessage = "Could not refresh recorder status";
+            return;
+        }
+        if (screenRecordingState === target)
+            requestScreenRecordingAction(target);
+        else
+            recordEvent("screen-record.toggle-reconciled", "requested=" + target + " current=" + screenRecordingState);
     }
     function requestPowerAction(action) {
         if (lockAcquiring)
@@ -392,6 +417,7 @@ ShellRoot {
         onExited: exitCode => {
             if (exitCode !== 0 && root.screenRecordingState === "checking")
                 root.screenRecordingState = "unavailable";
+            Qt.callLater(() => root.finishQueuedRecordingToggle(exitCode));
         }
     }
     Process {
@@ -671,6 +697,7 @@ ShellRoot {
         }
         onCommandRequested: text => root.launchCommand(text)
         onDismissRequested: if (!lock.active && !root.lockAcquiring) home.visible = false
+        onUnlockFramePresented: requestId => lock.releaseAfterHomeFrame(requestId)
     }
     Overview {
         id: overview
@@ -706,7 +733,7 @@ ShellRoot {
         recordingState: root.screenRecordingState
         recordingFile: root.screenRecordingFile
         recordingRemaining: root.screenRecordingRemaining
-        recordingActionPending: root.screenRecordingActionPending || screenRecordingStatus.running
+        recordingActionPending: root.screenRecordingActionPending || root.queuedRecordingTarget.length > 0
         keyboardVisible: root.keyboardVisible
         keyboardMode: root.keyboardMode
         onBrightnessRequested: value => root.setBrightness(value)
@@ -743,8 +770,17 @@ ShellRoot {
             root.lockRecoveryBlocked = false;
             unlockMarker.running = true;
             active = false;
-            Qt.callLater(() => root.showHome());
+            home.visible = true;
         }
+        onUnlockRequested: requestId => {
+            if (!lock.active || !lock.secure)
+                return;
+            root.recordEvent("lock.home-frame-wait", "request=" + requestId);
+            home.requestUnlockFrame(requestId);
+            home.visible = true;
+        }
+        onUnlockFrameTimedOut: requestId => home.cancelUnlockFrame(requestId)
+        onUnlockFrameCancelled: requestId => home.cancelUnlockFrame(requestId)
         onLockFailed: {
             root.recordEvent("lock.acquire-failed", "secure=" + lock.secure);
             root.lockAcquiring = false;
@@ -834,7 +870,7 @@ ShellRoot {
         function onValuesChanged() {
             root.refreshApplications();
             root.recordEvent("windows.changed", "count=" + ToplevelManager.toplevels.values.length);
-            if (root.lockAcquiring)
+            if (root.lockAcquiring || lock.active)
                 return;
             if (ToplevelManager.toplevels.values.length === 0) {
                 if (!lock.active) home.visible = true;

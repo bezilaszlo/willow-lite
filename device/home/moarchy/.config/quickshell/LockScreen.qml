@@ -24,6 +24,8 @@ Scope {
     property int restoreBrightness: 2047
     property bool wasSecure: false
     property bool unlockAnimationRunning: false
+    property int unlockRequestSequence: 0
+    property int pendingUnlockRequest: 0
     property bool gestureTracking: false
     property bool gestureWasDark: false
     property bool gestureInvalid: false
@@ -46,6 +48,9 @@ Scope {
     property bool restoreQueued: false
 
     signal unlocked()
+    signal unlockRequested(int requestId)
+    signal unlockFrameTimedOut(int requestId)
+    signal unlockFrameCancelled(int requestId)
     signal lockFailed()
     signal brightnessError(string message)
     signal diagnosticEvent(string name, string detail)
@@ -54,11 +59,52 @@ Scope {
     signal cancelPowerMenuRequested()
 
     function beginLock() {
+        cancelUnlockHandoff("new-lock")
         root.wasSecure = false;
         root.unlockAnimationRunning = false;
         root.darkState = true;
         sessionLock.locked = true;
         acquireTimeout.restart();
+    }
+
+    function releaseAfterHomeFrame(requestId) {
+        if (!root.active || !root.secure || !root.awake || !root.unlockAnimationRunning
+                || requestId === 0 || requestId !== root.pendingUnlockRequest)
+            return
+        unlockHomeTimeout.stop()
+        root.pendingUnlockRequest = 0
+        root.unlockAnimationRunning = false
+        root.diagnosticEvent("lock.home-frame-presented", "request=" + requestId)
+        sessionLock.locked = false
+    }
+
+    function requestUnlockAfterAnimation() {
+        if (!root.active || !root.secure || !root.unlockAnimationRunning
+                || root.pendingUnlockRequest !== 0)
+            return
+        if (!root.awake) {
+            cancelUnlockHandoff("not-awake")
+            return
+        }
+        root.unlockRequestSequence++
+        root.pendingUnlockRequest = root.unlockRequestSequence
+        root.diagnosticEvent("lock.home-frame-request", "request=" + root.pendingUnlockRequest)
+        unlockHomeTimeout.restart()
+        root.unlockRequested(root.pendingUnlockRequest)
+    }
+
+    function cancelUnlockHandoff(reason) {
+        if (root.pendingUnlockRequest === 0 && !root.unlockAnimationRunning)
+            return
+        const requestId = root.pendingUnlockRequest
+        unlockHomeTimeout.stop()
+        unlockContent.stop()
+        root.pendingUnlockRequest = 0
+        root.unlockAnimationRunning = false
+        root.swipeOffset = 0
+        root.diagnosticEvent("lock.home-frame-cancelled", "request=" + requestId + " reason=" + reason)
+        if (requestId !== 0)
+            root.unlockFrameCancelled(requestId)
     }
 
     function queueBrightness(action) {
@@ -96,6 +142,7 @@ Scope {
     function dim() {
         if (!root.active || !root.secure || root.powerMenuVisible)
             return;
+        cancelUnlockHandoff("dim")
         diagnosticEvent("brightness.request", "dim");
         root.darkState = true;
         root.queueBrightness("dim");
@@ -215,6 +262,7 @@ Scope {
         else {
             acquireTimeout.stop();
             idleTimer.stop();
+            cancelUnlockHandoff("inactive");
             root.darkState = false;
             if (sessionLock.locked)
                 sessionLock.locked = false;
@@ -242,6 +290,7 @@ Scope {
             if (root.active && !root.secure) {
                 if (sessionLock.locked)
                     sessionLock.locked = false;
+                root.cancelUnlockHandoff("acquire-failed")
                 root.lockFailed();
             }
         }
@@ -253,6 +302,26 @@ Scope {
         repeat: false
         onTriggered: if (root.active && root.awake && !root.powerMenuVisible)
             root.dim();
+    }
+
+    Timer {
+        id: unlockHomeTimeout
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            if (!root.active || !root.secure || !root.unlockAnimationRunning
+                    || root.pendingUnlockRequest === 0)
+                return
+            const requestId = root.pendingUnlockRequest
+            root.pendingUnlockRequest = 0
+            root.unlockAnimationRunning = false
+            root.swipeOffset = 0
+            root.diagnosticEvent("lock.home-frame-timeout", "request=" + requestId)
+            root.unlockFrameTimedOut(requestId)
+            root.brightnessError("Home did not render; the session remains locked.")
+            if (root.awake && !root.powerMenuVisible)
+                idleTimer.restart()
+        }
     }
 
     Process {
@@ -396,7 +465,7 @@ Scope {
         to: -root.surfaceHeight
         duration: 330
         easing.type: Easing.OutCubic
-        onFinished: sessionLock.locked = false
+        onFinished: root.requestUnlockAfterAnimation()
     }
 
 }
