@@ -4,9 +4,9 @@ The touchscreen is mapped to the single display. Sway's `bindgesture` is touchpa
 
 | Gesture | Behavior | Status |
 |---|---|---|
-| Three fingers down | Save a full-screen PNG to `~/Pictures/Screenshots/`, flash the screen, show a "Screenshot saved" notice. Never triggers with one or two fingers. | Built (Sway), physical test pending |
-| Pull from the left or right edge | Back. See below. | Built (Sway), needs the live animation |
-| Swipe up from the bottom edge | Open the app overview. The overview follows the finger. Swipe up again to close it. | Built (Sway), physical test pending |
+| Exactly three fingers down | Save a full-screen PNG to `~/Pictures/Screenshots/`, flash the screen, show a "Screenshot saved" notice. One, two, or four fingers do not trigger it. | Implemented; physical test pending |
+| Pull from the left or right edge | Cancellable Back. See below. | Implemented; physical test pending |
+| Swipe up from the bottom edge | Open the running-app selector; its panel follows the finger. Tap a card to focus it, or swipe that card up to close it. Choose Home to return to the launcher. | Implemented; physical test pending |
 
 ## Back
 
@@ -21,7 +21,9 @@ What Back does, in order: hide the on-screen keyboard if shown; otherwise close 
 
 ## Overview
 
-A carousel of app cards with a thumbnail of each running app, most recent in the center. Tap a card to switch, swipe a card up to close it, and use Close all to clear everything. Thumbnails come from per-window capture (`grim -T`) on Sway or Quickshell's `ScreencopyView` on Hyprland.
+A horizontal carousel of running-app cards with per-window thumbnails. Tap a card to switch, swipe a card up to close it, and use Close all to clear everything. Home returns to the launcher without closing windows. Thumbnails come from per-window capture (`grim -T`) on Sway or Quickshell's `ScreencopyView` on Hyprland.
+
+The bottom handle opens the selector from either the launcher or an app. While the selector is open, swipe down from the handle or use edge Back to dismiss it. The card gesture closes only the card being swiped; Home never terminates apps.
 
 ## Porting between Sway and Hyprland
 
@@ -40,6 +42,6 @@ Hyprland 0.56 rejects `hyprctl keyword` under a Lua config; runtime changes go t
 
 ## Open points
 
-- Feel tuning with real fingers: edge band width (24 px), Back threshold (72 px).
-- The bottom strip and the side Back strips overlap at the corners.
-- The three-finger swipe also reaches the app underneath, since nothing is intercepted.
+- Feel tuning with real fingers: edge band width (24 px), Back threshold (72 px), and bottom gesture travel.
+- The bottom strip and side Back strips overlap at the corners.
+- Physical validation remains pending for screenshot, Back, selector, card dismissal, launcher actions, and keyboard interaction after shell reload.

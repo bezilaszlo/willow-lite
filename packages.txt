@@ -8,6 +8,8 @@ rsync
 sway
 hyprland
 grim
+perl
+wtype
 quickshell
 foot
 ttf-dejavu

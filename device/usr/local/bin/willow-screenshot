@@ -1,0 +1,8 @@
+#!/bin/sh
+# Capture the current display and show a short Quickshell confirmation.
+set -eu
+dir="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
+mkdir -p "$dir"
+out="$dir/screenshot-$(date +%Y%m%d-%H%M%S).png"
+grim "$out"
+WILLOW_SCREENSHOT="$out" exec qs -p "$HOME/.config/quickshell/willow-screenshot-flash.qml" >/dev/null 2>&1

@@ -1,0 +1,48 @@
+#!/bin/sh
+# Keep Quickshell's keyboard state in this session's private runtime directory.
+set -eu
+
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+state="$runtime/willow-keyboard-visible"
+signal_keyboard() {
+    pkill -"$1" -x wvkbd-mobintl
+}
+write_visible() {
+    temporary="$state.$$"
+    printf 'visible\n' >"$temporary"
+    mv -f "$temporary" "$state"
+}
+
+case ${1:-} in
+    reset)
+        rm -f "$state"
+        ;;
+    status)
+        if [ -r "$state" ]; then cat "$state"; else printf 'hidden\n'; fi
+        ;;
+    show)
+        if [ ! -r "$state" ]; then
+            signal_keyboard USR2
+            write_visible
+        fi
+        ;;
+    hide)
+        if [ -r "$state" ]; then
+            signal_keyboard USR1
+            rm -f "$state"
+        fi
+        ;;
+    toggle)
+        if [ -r "$state" ]; then
+            signal_keyboard USR1
+            rm -f "$state"
+        else
+            signal_keyboard USR2
+            write_visible
+        fi
+        ;;
+    *)
+        echo 'usage: willow-keyboard reset|status|show|hide|toggle' >&2
+        exit 2
+        ;;
+esac

@@ -9,6 +9,7 @@ export LANG="${LANG:-C.UTF-8}"
 log() { echo "$(date -u +%FT%TZ) $*" >>"$state/session.log"; }
 
 sway_session() {
+    willow-keyboard reset
     log "starting sway${1:+ ($1)}"
     exec sway >"$state/sway.log" 2>&1
 }
@@ -46,6 +47,7 @@ stop_hyprland() {
 if [ "$choice" != hyprland ] || ! command -v Hyprland >/dev/null; then
     sway_session
 fi
+willow-keyboard reset
 if [ -e "$state/hyprland-crashed" ]; then
     rm -f "$state/hyprland-crashed"
     sway_session "Hyprland crashed on its last start"

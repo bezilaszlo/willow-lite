@@ -11,5 +11,6 @@ bindsym $mod+Return exec foot
 bindsym $mod+Shift+q kill
 bindsym $mod+Shift+e exec swaymsg exit
 
-exec qs -p /home/moarchy/.config/quickshell/willow.qml
+exec qs -p /home/moarchy/.config/quickshell/willow-sway.qml
 exec wvkbd-mobintl -H 310 --hidden --wayland-layer overlay
+exec systemd-cat -t willow-screenshot sh -c 'pid=$(pgrep -n -x sway); [ -n "$pid" ] && exec willow-screenshot-gesture --session-pid "$pid"'

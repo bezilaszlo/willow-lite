@@ -1,0 +1,29 @@
+#!/bin/sh
+# Read status directly from the current device; report unavailable values rather than guessing.
+set -eu
+
+battery=unavailable
+for capacity in /sys/class/power_supply/*/capacity; do
+    [ -r "$capacity" ] || continue
+    value=$(cat "$capacity" 2>/dev/null || true)
+    case $value in
+        ''|*[!0-9]*) continue ;;
+    esac
+    battery="${value}%"
+    break
+done
+
+network=
+for interface in usb0 wlan0; do
+    state_file="/sys/class/net/$interface/operstate"
+    [ -r "$state_file" ] || continue
+    state=$(cat "$state_file" 2>/dev/null || true)
+    [ "$state" = up ] || continue
+    if [ "$interface" = usb0 ]; then
+        network="${network:+$network · }USB"
+    else
+        network="${network:+$network · }Wi-Fi"
+    fi
+done
+[ -n "$network" ] || network=offline
+printf 'battery=%s\nnetwork=%s\n' "$battery" "$network"

@@ -1,0 +1,162 @@
+#!/usr/bin/perl
+# Observe multitouch without grabbing it; only a three-finger downward swipe captures.
+use strict;
+use warnings;
+use Fcntl qw(LOCK_EX);
+use IO::Select;
+
+package WillowSwipe;
+
+use constant {
+    EV_SYN => 0, EV_ABS => 3,
+    SYN_REPORT => 0, SYN_DROPPED => 3,
+    ABS_MT_SLOT => 47, ABS_MT_POSITION_X => 53, ABS_MT_POSITION_Y => 54, ABS_MT_TRACKING_ID => 57,
+};
+
+sub new {
+    my ($class, %opt) = @_;
+    return bless { fingers => 3, travel => $opt{travel}, slot => 0, touches => {}, start => {}, fired => 0, dropped => 0 }, $class;
+}
+
+sub event {
+    my ($self, $type, $code, $value) = @_;
+    if ($type == EV_SYN && $code == SYN_DROPPED) {
+        $self->{dropped} = 1;
+        return 0;
+    }
+    if ($self->{dropped}) {
+        return 0 unless $type == EV_SYN && $code == SYN_REPORT;
+        @$self{qw(dropped touches start)} = (0, {}, {});
+        return 0;
+    }
+    if ($type == EV_ABS) {
+        if ($code == ABS_MT_SLOT) {
+            $self->{slot} = $value;
+            return 0;
+        }
+        my $touch = $self->{touches}{$self->{slot}} //= {};
+        if ($code == ABS_MT_TRACKING_ID) {
+            delete $self->{start}{$self->{slot}};
+            $touch->{id} = $value < 0 ? undef : $value;
+        } elsif ($code == ABS_MT_POSITION_X) {
+            $touch->{x} = $value;
+        } elsif ($code == ABS_MT_POSITION_Y) {
+            $touch->{y} = $value;
+        }
+        return 0;
+    }
+    return 0 unless $type == EV_SYN && $code == SYN_REPORT;
+    return $self->report;
+}
+
+sub report {
+    my ($self) = @_;
+    my $touches = $self->{touches};
+    my @down = grep { defined $touches->{$_}{id} && defined $touches->{$_}{x} && defined $touches->{$_}{y} } keys %$touches;
+    if (!@down) {
+        @$self{qw(start fired)} = ({}, 0);
+        return 0;
+    }
+    return 0 if $self->{fired};
+    if (@down != $self->{fingers}) {
+        $self->{start} = {};
+        return 0;
+    }
+    my $moved = 0;
+    for my $slot (@down) {
+        my $now = $touches->{$slot};
+        my $from = $self->{start}{$slot} //= { x => $now->{x}, y => $now->{y} };
+        my $dy = $now->{y} - $from->{y};
+        $moved++ if $dy >= $self->{travel} && $dy > abs($now->{x} - $from->{x});
+    }
+    return 0 if $moved < $self->{fingers};
+    $self->{fired} = 1;
+    return 1;
+}
+
+package main;
+
+use constant { INPUT_PROP_DIRECT => 1, EVENT_SIZE => 24 };
+
+sub evdev_read_ioctl {
+    my ($nr, $len) = @_;
+    return (2 << 30) | ($len << 16) | (ord('E') << 8) | $nr;
+}
+
+sub has_bit { return vec($_[0], $_[1], 1); }
+
+sub touchscreen {
+    my ($fh) = @_;
+    my ($props, $abs) = ("\0" x 4, "\0" x 8);
+    ioctl($fh, evdev_read_ioctl(0x09, 4), $props) or return 0;
+    ioctl($fh, evdev_read_ioctl(0x20 + WillowSwipe::EV_ABS, 8), $abs) or return 0;
+    return has_bit($props, INPUT_PROP_DIRECT)
+        && has_bit($abs, WillowSwipe::ABS_MT_SLOT)
+        && has_bit($abs, WillowSwipe::ABS_MT_POSITION_Y);
+}
+
+sub open_touchscreen {
+    my ($path) = @_;
+    for my $candidate (defined $path ? ($path) : sort glob('/dev/input/event*')) {
+        open(my $fh, '<:raw', $candidate) or next;
+        return ($fh, $candidate) if defined $path || touchscreen($fh);
+    }
+    die "willow-screenshot-gesture: no touchscreen found\n";
+}
+
+sub y_range {
+    my ($fh) = @_;
+    my $info = "\0" x 24;
+    ioctl($fh, evdev_read_ioctl(0x40 + WillowSwipe::ABS_MT_POSITION_Y, 24), $info)
+        or die "willow-screenshot-gesture: cannot read the Y axis range: $!\n";
+    my (undef, $min, $max) = unpack('l3', $info);
+    return $max - $min;
+}
+
+sub pump {
+    my ($fh, $swipe, $on_swipe, $session_pid) = @_;
+    my $pending = '';
+    my $select = IO::Select->new($fh);
+    while (1) {
+        die "willow-screenshot-gesture: compositor session ended\n"
+            if $session_pid && !kill(0, $session_pid);
+        next unless $select->can_read(1);
+        my $got = sysread($fh, $pending, EVENT_SIZE * 64, length $pending);
+        die "willow-screenshot-gesture: read failed: $!\n" unless defined $got;
+        return if $got == 0;
+        while (length $pending >= EVENT_SIZE) {
+            my ($type, $code, $value) = unpack('x16 S S l', substr($pending, 0, EVENT_SIZE, ''));
+            $on_swipe->() if $swipe->event($type, $code, $value);
+        }
+    }
+}
+
+sub run {
+    my $session_pid;
+    if (@ARGV == 2 && $ARGV[0] eq '--session-pid' && $ARGV[1] =~ /^\d+$/) {
+        shift @ARGV;
+        $session_pid = shift @ARGV;
+    } elsif (@ARGV > 1 || (@ARGV && $ARGV[0] eq '--session-pid')) {
+        die "usage: willow-screenshot-gesture --session-pid PID\n";
+    }
+    my $runtime = $ENV{XDG_RUNTIME_DIR} || "/run/user/$<";
+    open my $lock, '>>', "$runtime/willow-screenshot-gesture.lock"
+        or die "willow-screenshot-gesture: cannot open session lock: $!\n";
+    flock($lock, LOCK_EX);
+    die "willow-screenshot-gesture: compositor session ended\n"
+        if $session_pid && !kill(0, $session_pid);
+    my ($fh) = open_touchscreen(undef);
+    my $travel = int(y_range($fh) / 10);
+    $SIG{CHLD} = 'IGNORE';
+    pump($fh, WillowSwipe->new(travel => $travel), sub {
+        my $pid = fork;
+        if (defined $pid && $pid == 0) {
+            exec('willow-screenshot') or die "willow-screenshot-gesture: cannot run willow-screenshot: $!\n";
+        }
+        warn "willow-screenshot-gesture: fork failed: $!\n" unless defined $pid;
+    }, $session_pid);
+    die "willow-screenshot-gesture: touchscreen event stream closed\n";
+}
+
+run() unless caller;
+1;

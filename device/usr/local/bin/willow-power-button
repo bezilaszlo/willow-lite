@@ -6,15 +6,39 @@ event=/dev/input/by-path/platform-1c40000.spmi-platform-1c40000.spmi:pmic@0:pon@
 parent=$PPID
 [ -r "$event" ] || { echo unavailable; exit 1; }
 
-systemd-inhibit --what=handle-power-key --who='Willow Lite' \
-    --why='Willow Lite handles the physical power key' --mode=block \
-    sh -c 'stdbuf -oL od -An -v -tu2 -w24 "$1" | awk '\''
+if [ "${1:-}" = --reader ]; then
+    owner=$2
+    event=$3
+    stop_tree() {
+        for child in $(pgrep -P "$1" 2>/dev/null || true); do
+            stop_tree "$child"
+        done
+        kill "$1" 2>/dev/null || true
+    }
+    stdbuf -oL od -An -v -tu2 -w24 "$event" | awk '
         NF == 12 && $9 == 1 && $10 == 116 {
             value = $11 + $12 * 65536
             if (value == 1) print "down"; else if (value == 0) print "up"
             fflush()
         }
-    '\''' sh "$event" &
+    ' &
+    reader=$!
+    cleanup() {
+        stop_tree "$reader"
+        wait "$reader" 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    trap 'exit 0' HUP INT TERM
+    while kill -0 "$owner" 2>/dev/null; do
+        kill -0 "$reader" 2>/dev/null || exit 1
+        sleep 0.25
+    done
+    exit 0
+fi
+
+systemd-inhibit --what=handle-power-key --who='Willow Lite' \
+    --why='Willow Lite handles the physical power key' --mode=block \
+    sh -c 'exec "$1" --reader "$2" "$3"' sh "$0" "$$" "$event" &
 inhibitor=$!
 
 cleanup() {

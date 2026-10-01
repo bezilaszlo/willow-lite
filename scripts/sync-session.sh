@@ -8,7 +8,7 @@ PHONE=${PHONE:-moarchy@172.16.42.1}
 SSH_OPTS=${SSH_OPTS:--o UserKnownHostsFile=/tmp/willow-lite-known-hosts}
 
 # shellcheck disable=SC2086
-tar -C "$ROOT/device/usr/local/bin" -cf - willow-session willow-compositor willow-power-button willow-power-action |
+tar -C "$ROOT/device/usr/local/bin" -cf - willow-session willow-compositor willow-power-button willow-power-action willow-screenshot-gesture willow-screenshot willow-status willow-keyboard |
     ssh $SSH_OPTS "$PHONE" 'stage=$(mktemp -d) && tar -C "$stage" -xf - && sudo install -o root -g root -m 0755 -t /usr/local/bin "$stage"/* && rm -rf "$stage"'
 # shellcheck disable=SC2086
 tar -C "$ROOT/device/home/moarchy" -cf - .bash_profile .config | ssh $SSH_OPTS "$PHONE" 'tar -C "$HOME" -xf -'
