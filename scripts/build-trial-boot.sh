@@ -12,6 +12,16 @@ DTB=${DTB:-}
 DEADMAN=${DEADMAN:-240}
 USB=${USB:-rndis}
 WDT=${WDT:-0}
+NO_CTM=${NO_CTM:-0}
+
+case "$NO_CTM" in
+  0|1) ;;
+  *) echo "NO_CTM must be 0 or 1" >&2; exit 2 ;;
+esac
+if [ "$NO_CTM" = 1 ] && [ -z "$KERNEL" ]; then
+  echo "NO_CTM=1 requires an own KERNEL/DTB trial" >&2
+  exit 2
+fi
 
 test -r "$DIAG" && test -r "$NORMAL"
 if [ -n "$KERNEL" ]; then
@@ -36,7 +46,7 @@ install -m 0755 "$OUT/deadman" "$TREE/sbin/deadman"
 (cd "$TREE" && find . -print0 | sort -z | cpio --null -o -H newc --reproducible 2>/dev/null | gzip -9 -n > "$OUT/willow-lite-ramdisk.cpio.gz")
 
 DIAG="$DIAG" NORMAL="$NORMAL" RAMDISK="$OUT/willow-lite-ramdisk.cpio.gz" IMAGE="$IMAGE_OUT" \
-KERNEL="$KERNEL" DTB="$DTB" DEADMAN="$DEADMAN" USB="$USB" WDT="$WDT" python3 - <<'PY'
+KERNEL="$KERNEL" DTB="$DTB" DEADMAN="$DEADMAN" USB="$USB" WDT="$WDT" NO_CTM="$NO_CTM" python3 - <<'PY'
 import gzip
 import os
 import struct
@@ -63,12 +73,16 @@ header = bytearray(diag[:page])
 header[64:576] = normal[64:576]
 cmdline = header[64:576].split(b"\0", 1)[0].replace(b"panic=0", b"panic=30")
 cmdline = cmdline.replace(b"fw_devlink.sync_state=disabled", b"fw_devlink.sync_state=timeout")
-cmdline = b" ".join(part for part in cmdline.split() if not part.startswith((b"willow_root=", b"willow_deadman=", b"willow_usb=", b"willow_wdt=", b"oops=", b"panic=", b"watchdog_thresh=", b"hung_task_timeout_secs=", b"softlockup_panic=", b"hung_task_panic=", b"rcu_cpu_stall_timeout=", b"rcupdate.rcu_cpu_stall_timeout=", b"sysctl.kernel.panic_on_rcu_stall=", b"sysctl.kernel.max_rcu_stall_to_panic=", b"netconsole=")))
+cmdline = b" ".join(part for part in cmdline.split() if not part.startswith((b"willow_root=", b"willow_deadman=", b"willow_usb=", b"willow_wdt=", b"msm.no_ctm=", b"oops=", b"panic=", b"watchdog_thresh=", b"hung_task_timeout_secs=", b"softlockup_panic=", b"hung_task_panic=", b"rcu_cpu_stall_timeout=", b"rcupdate.rcu_cpu_stall_timeout=", b"sysctl.kernel.panic_on_rcu_stall=", b"sysctl.kernel.max_rcu_stall_to_panic=", b"netconsole=")))
 cmdline += b" willow_root=/var/lib/willow-lite-trial oops=panic panic=30 watchdog_thresh=60 rcupdate.rcu_cpu_stall_timeout=60 sysctl.kernel.panic_on_rcu_stall=1"
 if own:
     cmdline += b" willow_deadman=" + os.environ["DEADMAN"].encode() + b" willow_usb=" + os.environ["USB"].encode()
     if os.environ["WDT"] != "0":
         cmdline += b" willow_wdt=" + os.environ["WDT"].encode()
+    if os.environ["NO_CTM"] == "1":
+        cmdline = b" ".join(part for part in cmdline.split()
+                             if part not in (b"ro", b"rootwait", b"loglevel=8"))
+        cmdline += b" msm.no_ctm=1"
 assert len(cmdline) < 512, "cmdline too long"
 header[64:576] = cmdline + b"\0" * (512 - len(cmdline))
 struct.pack_into("<I", header, 8, len(kernel))
