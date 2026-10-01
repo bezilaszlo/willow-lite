@@ -27,10 +27,8 @@ case ${1:-} in
         fi
         ;;
     hide)
-        if [ -r "$state" ]; then
-            signal_keyboard USR1
-            rm -f "$state"
-        fi
+        signal_keyboard USR1 || :
+        rm -f "$state"
         ;;
     toggle)
         if [ -r "$state" ]; then
