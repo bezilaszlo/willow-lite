@@ -1,257 +1,221 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "."
 
 Scope {
     id: root
-
-    Theme { id: theme }
-
     property bool visible: false
-    property string clockText: "Time unavailable"
-    property string dateText: "Date unavailable"
-    property string batteryText: "Battery unavailable"
-    property string networkText: "Network unavailable"
+    property string clockText: "--:--"
+    property string dateText: ""
+    property string systemText: ""
+    property string batteryText: ""
+    property string networkText: ""
+    property var runningApps: []
+    property var frequentApps: []
     property var applications: []
 
+    signal drawerRequested()
     signal terminalRequested()
     signal overviewRequested()
     signal keyboardRequested()
     signal dismissRequested()
+    signal controlCenterRequested()
+    signal appRequested(var entry)
+    signal commandRequested(string text)
 
-    function refreshApplications() {
-        applications = DesktopEntries.applications.values
-            .filter(entry => !entry.noDisplay && entry.name)
-            .sort((a, b) => a.name.localeCompare(b.name));
+    function appName(app) { return typeof app === "string" ? app : (app.name || "App") }
+    function resolvedSystemText() {
+        if (systemText) return systemText
+        return [batteryText, networkText].filter(value => value).join("  ")
     }
-
-    Component.onCompleted: refreshApplications()
-    Connections {
-        target: DesktopEntries
-        function onApplicationsChanged() { root.refreshApplications(); }
+    function formattedDate() { return dateText.toLowerCase().replace(/\b([0-9])\b/g, "0$1") }
+    function findApp(query) {
+        const key = query.trim().toLocaleLowerCase()
+        if (!key) return null
+        return applications.find(entry => entry.name.toLocaleLowerCase() === key)
+            || applications.find(entry => entry.name.toLocaleLowerCase().startsWith(key))
+            || applications.find(entry => (entry.genericName || "").toLocaleLowerCase().includes(key))
+            || null
     }
 
     PanelWindow {
         visible: root.visible
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
+        anchors { top: true; bottom: true; left: true; right: true }
         exclusiveZone: 0
-        color: "transparent"
-        WlrLayershell.layer: WlrLayer.Top
+        color: ThemeStore.background
+        WlrLayershell.layer: WlrLayer.Bottom
+        WlrLayershell.namespace: "willow-home"
 
-        Rectangle {
+        Item {
             anchors.fill: parent
-            color: theme.background
-
-            Rectangle {
-                x: 0
-                y: 0
-                width: parent.width
-                height: 5
-                color: theme.accent
+            Canvas {
+                anchors.fill: parent
+                z: -2
+                onPaint: {
+                    const context = getContext("2d")
+                    context.clearRect(0, 0, width, height)
+                    for (let y = 9; y < height * 0.62; y += 27) {
+                        context.globalAlpha = 0.17 * (1 - y / (height * 0.62))
+                        for (let x = 13; x < width; x += 27) {
+                            context.beginPath()
+                            context.arc(x, y, 1.1, 0, Math.PI * 2)
+                            context.fillStyle = ThemeStore.foreground
+                            context.fill()
+                        }
+                    }
+                    context.globalAlpha = 1
+                }
+                Connections {
+                    target: ThemeStore
+                    function onThemeNameChanged() { parent.requestPaint() }
+                }
+            }
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                property real startX: 0
+                property real startY: 0
+                onPressed: { startX = mouse.x; startY = mouse.y }
+                onReleased: {
+                    const dx = mouse.x - startX
+                    const dy = mouse.y - startY
+                    if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+                        if (dy < 0) root.drawerRequested()
+                        else root.controlCenterRequested()
+                    }
+                }
+            }
+            Column {
+                x: 24; y: 13
+                spacing: 0
+                Text {
+                    text: root.clockText.includes(":") ? root.clockText.slice(0, root.clockText.indexOf(":")) : root.clockText
+                    color: ThemeStore.brightForeground
+                    font.family: ThemeStore.fontFamily; font.pixelSize: 206; font.weight: Font.Thin; font.letterSpacing: -15.45
+                    height: 171; verticalAlignment: Text.AlignTop
+                }
+                Text {
+                    text: root.clockText.includes(":") ? root.clockText.slice(root.clockText.indexOf(":") + 1) : ""
+                    color: ThemeStore.accent
+                    font.family: ThemeStore.fontFamily; font.pixelSize: 206; font.weight: Font.Thin; font.letterSpacing: -15.45
+                    height: 171; verticalAlignment: Text.AlignTop
+                }
+            }
+            Text {
+                x: 34; y: 430
+                text: root.formattedDate()
+                color: ThemeStore.foreground
+                font.family: ThemeStore.fontFamily
+                font.pixelSize: 21
+            }
+            Text {
+                x: 34; y: 469
+                width: parent.width - 68
+                text: root.resolvedSystemText()
+                color: ThemeStore.darkForeground
+                font.family: ThemeStore.fontFamily
+                font.pixelSize: 13
+                elide: Text.ElideRight
             }
 
             Column {
-                anchors.fill: parent
-                anchors.leftMargin: 28
-                anchors.rightMargin: 28
-                anchors.topMargin: 22
-                anchors.bottomMargin: 28
-                spacing: 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                anchors.bottomMargin: 40
+                spacing: 14
 
-                Text {
+                Flickable {
                     width: parent.width
-                    text: root.clockText
-                    color: theme.textPrimary
-                    font.pixelSize: 46
-                    font.weight: Font.Light
-                    font.letterSpacing: -1.5
-                    elide: Text.ElideRight
-                    topPadding: 22
-                }
-
-                Text {
-                    width: parent.width
-                    text: root.dateText
-                    color: theme.textMuted
-                    font.pixelSize: 15
-                    topPadding: 2
-                }
-
-                Row {
-                    width: parent.width
-                    height: 28
-                    spacing: 14
-
-                    Text {
-                        text: root.batteryText
-                        color: theme.textSecondary
-                        font.pixelSize: 14
-                        elide: Text.ElideRight
-                    }
-
-                    Rectangle { width: 3; height: 3; radius: 2; color: theme.textMuted; anchors.verticalCenter: parent.verticalCenter }
-
-                    Text {
-                        width: parent.width - 140
-                        text: root.networkText
-                        color: theme.textSecondary
-                        font.pixelSize: 14
-                        elide: Text.ElideRight
-                    }
-                }
-
-                Row {
-                    width: parent.width
-                    height: 62
-                    spacing: 12
-                    Rectangle {
-                        width: (parent.width - parent.spacing) / 2
-                        height: 54
-                        radius: 18
-                        color: recentTap.pressed ? theme.surfacePressed : theme.surface
-                        border.color: theme.border
-                        Text { anchors.centerIn: parent; text: "Recent apps"; color: theme.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
-                        MouseArea { id: recentTap; anchors.fill: parent; onClicked: root.overviewRequested() }
-                    }
-                    Rectangle {
-                        width: (parent.width - parent.spacing) / 2
-                        height: 54
-                        radius: 18
-                        color: keyboardTap.pressed ? theme.surfacePressed : theme.surface
-                        border.color: theme.border
-                        Text { anchors.centerIn: parent; text: "Keyboard"; color: theme.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
-                        MouseArea { id: keyboardTap; anchors.fill: parent; onClicked: root.keyboardRequested() }
-                    }
-                }
-
-                Text {
-                    width: parent.width
-                    text: "Applications"
-                    color: theme.textPrimary
-                    font.pixelSize: 21
-                    font.weight: Font.Medium
-                    bottomPadding: 18
-                }
-
-                GridView {
-                    id: grid
-                    width: parent.width
-                    height: Math.max(104, parent.height - 446)
-                    cellWidth: Math.floor(width / 2)
-                    cellHeight: 104
+                    height: 44
+                    contentWidth: chips.width
                     clip: true
-                    model: root.applications
-
-                    delegate: Rectangle {
-                        id: appTile
-                        required property var modelData
-                        width: grid.cellWidth - 8
-                        height: 90
-                        radius: 20
-                        color: appTap.pressed ? theme.surfacePressed : theme.surface
-                        border.color: appTap.pressed ? theme.accent : theme.border
-                        border.width: 1
-
-                        Row {
-                            anchors.fill: parent
-                            anchors.margins: 13
-                            spacing: 11
-                            Rectangle {
-                                id: appIconTile
-                                width: 44; height: 44; radius: 15
-                                color: "#1d3b38"
-                                anchors.verticalCenter: parent.verticalCenter
-                                Image {
-                                    id: appIcon
-                                    anchors.fill: parent
-                                    anchors.margins: 8
-                                    source: appTile.modelData.icon ? Quickshell.iconPath(appTile.modelData.icon, true) : ""
-                                    fillMode: Image.PreserveAspectFit
-                                    visible: status === Image.Ready
-                                }
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: (appTile.modelData.name || "?").slice(0, 1).toUpperCase()
-                                    color: theme.accent
-                                    font.pixelSize: 20
-                                    font.weight: Font.DemiBold
-                                    visible: appIcon.status !== Image.Ready
-                                }
-                            }
-                            Column {
-                                width: parent.width - 55
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 4
-                                Text {
-                                    width: parent.width
-                                    text: appTile.modelData.name
-                                    color: theme.textPrimary
-                                    font.pixelSize: 15
-                                    font.weight: Font.Medium
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    width: parent.width
-                                    text: appTile.modelData.genericName || appTile.modelData.comment || "Application"
-                                    color: theme.textMuted
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                }
-                            }
+                    boundsBehavior: Flickable.StopAtBounds
+                    Row {
+                        id: chips
+                        spacing: 8
+                        Repeater { model: root.runningApps.map(app => ({ app: app, running: true })); delegate: chipDelegate }
+                        Repeater {
+                            model: root.frequentApps.map(app => ({ app: app, running: false })); delegate: chipDelegate
                         }
-                        Accessible.name: appTile.modelData.name
-                        Accessible.role: Accessible.Button
-                        MouseArea {
-                            id: appTap
-                            anchors.fill: parent
-                            onClicked: {
-                                appTile.modelData.execute();
-                                root.dismissRequested();
-                            }
+                        Rectangle {
+                            width: appsLabel.implicitWidth + 26; height: 38; radius: 19
+                            color: ThemeStore.lighterBackground
+                            border.color: ThemeStore.muted
+                            Text { id: appsLabel; anchors.centerIn: parent; text: "apps ↑"; color: ThemeStore.accent; font.family: ThemeStore.fontFamily; font.pixelSize: 13 }
+                            MouseArea { anchors.fill: parent; onClicked: root.drawerRequested() }
                         }
                     }
                 }
 
                 Rectangle {
                     width: parent.width
-                    height: 66
-                    visible: ToplevelManager.toplevels.values.length > 0
-                    radius: 20
-                    color: theme.surface
-                    border.color: theme.border
-                    border.width: 1
-
+                    height: 58
+                    radius: 18
+                    color: ThemeStore.darkBackground
+                    border.color: prompt.activeFocus ? ThemeStore.accent : ThemeStore.muted
+                    border.width: prompt.activeFocus ? 2 : 1
                     Row {
                         anchors.fill: parent
-                        anchors.leftMargin: 20
-                        anchors.rightMargin: 18
+                        anchors.leftMargin: 17
+                        anchors.rightMargin: 12
                         spacing: 10
-
-                        Text {
-                            width: parent.width - 42
-                            text: "Return to the open window"
-                            color: theme.textSecondary
-                            font.pixelSize: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: "↗"
-                            color: theme.accent
-                            font.pixelSize: 23
-                            anchors.verticalCenter: parent.verticalCenter
+                        Text { text: "❯"; color: ThemeStore.accent; font.family: ThemeStore.fontFamily; font.pixelSize: 19; anchors.verticalCenter: parent.verticalCenter }
+                        TextInput {
+                            id: prompt
+                            width: parent.width - 50
+                            height: parent.height
+                            color: ThemeStore.brightForeground
+                            font.family: ThemeStore.fontFamily
+                            font.pixelSize: 15
+                            verticalAlignment: TextInput.AlignVCenter
+                            selectByMouse: true
+                            clip: true
+                            Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; text: "open an app or run a command"; color: ThemeStore.darkForeground; font: prompt.font; visible: !prompt.text && !prompt.activeFocus }
+                            function submit() {
+                                const typed = prompt.text.trim()
+                                const entry = root.findApp(typed)
+                                if (entry) root.appRequested(entry)
+                                else if (typed) root.commandRequested(typed)
+                                prompt.text = ""
+                            }
+                            Keys.onReturnPressed: submit()
+                            Keys.onEnterPressed: submit()
                         }
                     }
+                    MouseArea { anchors.fill: parent; z: -1; onClicked: prompt.forceActiveFocus() }
+                }
+            }
+        }
+    }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root.dismissRequested()
-                    }
+    Component {
+        id: chipDelegate
+        Rectangle {
+            required property var modelData
+            property var app: modelData.app
+            property bool running: modelData.running
+            width: label.implicitWidth + (running ? 31 : 24)
+            height: 38
+            radius: 19
+            color: ThemeStore.lighterBackground
+            border.color: ThemeStore.muted
+            Row {
+                anchors.centerIn: parent
+                spacing: 7
+                Rectangle { visible: parent.parent.running; width: 6; height: 6; radius: 3; color: ThemeStore.green; anchors.verticalCenter: parent.verticalCenter }
+                Text { id: label; text: root.appName(parent.parent.app); color: ThemeStore.foreground; font.family: ThemeStore.fontFamily; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    const app = parent.app
+                    const entry = app.desktopEntry || app.entry || root.findApp(root.appName(app))
+                    if (entry) root.appRequested(entry)
+                    else root.commandRequested(root.appName(app))
                 }
             }
         }
