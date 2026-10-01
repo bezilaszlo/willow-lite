@@ -12,6 +12,8 @@ The default duration is 90 seconds and the hard capture limit is 120 seconds. Th
 
 The helper prints only newline-separated `key=value` status fields: `state`, `file`, `remaining_seconds`, `max_seconds`, and `secure`. `secure=1` means the shell's session-lock marker currently exists; it does not claim a compositor protocol confirmed capture of protected content. States are `recording`, `idle`, `locked`, and `unavailable`. Starting while already locked exits with status 3; other operational errors exit nonzero. On stop, a bounded Quickshell `eventTimelineJson` snapshot is saved beside the video as `.events.json` when the running Willow shell exposes it. Idle status retains the most recent recording path.
 
+Concurrent status, start, and stop requests are serialized. If a recorder exits unexpectedly, a later status or control request retires its stale runtime markers while retaining any completed video as the most recent recording.
+
 For host-side review, sample one image per second and optionally save up to eight full-size frames around notable times:
 
 ```sh

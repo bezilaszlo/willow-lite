@@ -16,6 +16,11 @@ recorder_marker=$runtime_dir/recorder.pid
 mkdir -p -- "$runtime_dir"
 chmod 700 "$runtime_dir"
 
+# Serialize CLI transitions while leaving the detached worker independent.
+if [ "${1:-}" != __worker ] && [ "${1:-}" != __locked ]; then
+    exec /usr/bin/flock -x -o "$runtime_dir/control.lock" "$0" __locked "$@"
+fi
+
 emit_status() {
     printf 'state=%s\nfile=%s\nremaining_seconds=%s\nmax_seconds=%s\nsecure=%s\n' "$1" "$2" "$3" "$max_seconds" "$4"
 }
@@ -29,6 +34,40 @@ state_values() {
         IFS= read -r file < "$last_file" || true
     fi
     recording_file=$file
+}
+
+reconcile_stalled() {
+    state_values
+    [ "$state" = stalled ] || return 0
+    valid_worker && return 0
+    owned_recorder_alive && return 0
+    stale_state=$state stale_file=$file stale_worker= stale_recorder= stale_state_line=
+    [ ! -r "$state_file" ] || IFS= read -r stale_state_line < "$state_file" || true
+    [ ! -r "$worker_marker" ] || IFS= read -r stale_worker < "$worker_marker" || true
+    [ ! -r "$recorder_marker" ] || IFS= read -r stale_recorder < "$recorder_marker" || true
+    case $stale_worker in ''|*[!0-9]*) ;; *) kill -0 "$stale_worker" 2>/dev/null && return 0 ;; esac
+    case $stale_recorder in ''|*[!0-9]*) ;; *) kill -0 "$stale_recorder" 2>/dev/null && return 0 ;; esac
+
+    # Recheck this exact generation before retiring stale markers. A new start
+    # may have replaced them while the dead-process checks were running.
+    state_values
+    [ "$state" = "$stale_state" ] && [ "$file" = "$stale_file" ] || return 0
+    current_state_line=
+    [ ! -r "$state_file" ] || IFS= read -r current_state_line < "$state_file" || true
+    [ "$current_state_line" = "$stale_state_line" ] || return 0
+    current_worker= current_recorder=
+    [ ! -r "$worker_marker" ] || IFS= read -r current_worker < "$worker_marker" || true
+    [ ! -r "$recorder_marker" ] || IFS= read -r current_recorder < "$recorder_marker" || true
+    [ "$current_worker" = "$stale_worker" ] && [ "$current_recorder" = "$stale_recorder" ] || return 0
+    case $current_worker in ''|*[!0-9]*) ;; *) kill -0 "$current_worker" 2>/dev/null && return 0 ;; esac
+    case $current_recorder in ''|*[!0-9]*) ;; *) kill -0 "$current_recorder" 2>/dev/null && return 0 ;; esac
+
+    if [ -n "$file" ] && [ -s "$file" ]; then
+        printf '%s\n' "$file" > "$last_file.tmp"
+        mv -f -- "$last_file.tmp" "$last_file"
+    fi
+    rm -f -- "$state_file" "$file_state" "$worker_marker" "$recorder_marker"
+    rmdir "$runtime_dir/starting" 2>/dev/null || true
 }
 
 valid_worker() {
@@ -67,7 +106,7 @@ owned_recorder_alive() {
 
 owned_capture_ready() {
     owned_recorder_alive || return 1
-    for child_pid in $(cat "/proc/$check_pid/task/$check_pid/children" 2>/dev/null); do
+    for child_pid in $(ps -o pid= --ppid "$check_pid" 2>/dev/null); do
         case $child_pid in ''|*[!0-9]*) continue ;; esac
         [ -r "/proc/$child_pid/cmdline" ] || continue
         [ "$(stat -c %u "/proc/$child_pid" 2>/dev/null)" = "$(id -u)" ] || continue
@@ -186,12 +225,14 @@ worker() {
     return 0
 }
 
-    case ${1:-} in
+if [ "${1:-}" = __locked ]; then shift; fi
+case ${1:-} in
     __worker)
         [ "$#" -eq 3 ] || exit 2
         worker "$2" "$3"
         ;;
     status)
+        reconcile_stalled
         state_values
         if [ "$state" = stalled ]; then
             emit_status unavailable "$file" 0 0
@@ -215,6 +256,7 @@ worker() {
         case $seconds in ''|*[!0-9]*) emit_status unavailable none 0 0; exit 2 ;; esac
         [ "$seconds" -ge 1 ] || seconds=1
         [ "$seconds" -le "$max_seconds" ] || seconds=$max_seconds
+        reconcile_stalled
         state_values
         if [ "$state" = stalled ]; then emit_status unavailable "$file" 0 0; exit 1; fi
         if valid_worker && owned_capture_ready; then
@@ -240,6 +282,7 @@ worker() {
         if ! chmod 600 "$video_file"; then
             rm -f -- "$video_file"; rmdir "$runtime_dir/starting"; emit_status unavailable none 0 0; exit 1
         fi
+        recording_file=$video_file
         "$0" __worker "$seconds" "$video_file" </dev/null >/dev/null 2>&1 &
         child=$!
         attempt=0
@@ -260,7 +303,8 @@ worker() {
         fi
         exit 1
         ;;
-stop)
+    stop)
+        reconcile_stalled
         state_values
         if [ "$state" = stalled ]; then emit_status unavailable "$file" 0 0; exit 1; fi
         if valid_worker; then
