@@ -39,8 +39,9 @@ Scope {
                 Row {
                     width: parent.width
                     height: 34
-                    Text { text: "apps"; color: ThemeStore.brightForeground; font.family: ThemeStore.fontFamily; font.pixelSize: 20; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: root.applications.length + " installed"; color: ThemeStore.darkForeground; font.family: ThemeStore.fontFamily; font.pixelSize: 11; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter }
+                    Text { id: drawerHeading; text: "apps"; color: ThemeStore.brightForeground; font.family: ThemeStore.fontFamily; font.pixelSize: 20; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+                    Item { width: parent.width - drawerHeading.implicitWidth - installedCount.implicitWidth; height: 1 }
+                    Text { id: installedCount; text: root.applications.length + " installed"; color: ThemeStore.darkForeground; font.family: ThemeStore.fontFamily; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
                 }
                 Rectangle {
                     width: parent.width; height: 42; radius: 14

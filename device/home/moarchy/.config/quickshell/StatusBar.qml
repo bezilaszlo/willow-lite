@@ -10,8 +10,11 @@ PanelWindow {
     property string networkText: "Network unavailable"
     property string pillMessage: ""
     property bool home: false
+    property bool shown: true
     signal controlCenterRequested()
     signal pillActivated()
+
+    visible: root.shown
 
     function compactNetwork() {
         const value = networkText.toLowerCase()
@@ -112,12 +115,6 @@ PanelWindow {
                 const dx = Math.abs(mouse.x - startX)
                 if (dy > 50 && dy > dx) root.controlCenterRequested()
             }
-        }
-        Rectangle {
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-            height: 1
-            color: ThemeStore.muted
-            opacity: 0.42
         }
     }
 }

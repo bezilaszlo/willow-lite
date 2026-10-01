@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-10-01
+- Build the redesigned native QML shell: persistent theme palettes, app drawer, control center, recents cards, gesture feedback, and session-lock visuals. Host preview is captured; phone deployment and physical checks remain pending.
 - Add a pinned wvkbd bottom-margin option and deploy it with a 30 px gap above the physical-bottom gesture strip. On the current Hyprland session, the keyboard, gesture strip, and tiled-app reservation have been measured with no overlap or extra gap; physical swipe and spacebar retests remain pending.
 
 ## 2026-09-29

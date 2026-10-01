@@ -14,6 +14,7 @@ for capacity in /sys/class/power_supply/*/capacity; do
 done
 
 network=
+network_address=
 for interface in usb0 wlan0; do
     state_file="/sys/class/net/$interface/operstate"
     [ -r "$state_file" ] || continue
@@ -24,6 +25,8 @@ for interface in usb0 wlan0; do
     else
         network="${network:+$network · }Wi-Fi"
     fi
+    address=$(ip -4 -o addr show dev "$interface" 2>/dev/null | awk 'NR == 1 { sub(/\/.*/, "", $4); print $4; exit }')
+    [ -z "$address" ] || network_address="${network_address:+$network_address · }$address"
 done
 [ -n "$network" ] || network=offline
-printf 'battery=%s\nnetwork=%s\n' "$battery" "$network"
+printf 'battery=%s\nnetwork=%s\naddress=%s\n' "$battery" "$network" "${network_address:-unavailable}"

@@ -39,6 +39,7 @@ return function(device, session)
             disable_watchdog_warning = true,
             background_color = 0xff111827,
             focus_on_activate = true,
+            allow_session_lock_restore = true,
         },
         ecosystem = {
             no_update_news = true,
@@ -69,7 +70,7 @@ return function(device, session)
         hl.exec_cmd("qs -p " .. session.shell)
         hl.exec_cmd("sh -c 'pid=$(pgrep -n -x Hyprland); [ -n \"$pid\" ] && exec systemd-cat -t willow-screenshot willow-screenshot-gesture --session-pid \"$pid\"'")
         if session.keyboard then
-            hl.exec_cmd("wvkbd-mobintl -H 310 --bottom-margin 30 --hidden --wayland-layer top")
+            hl.exec_cmd("willow-keyboard launch")
         end
     end)
 end

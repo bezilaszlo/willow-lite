@@ -1,46 +1,118 @@
 #!/bin/sh
-# Keep Quickshell's keyboard state in this session's private runtime directory.
+# Control the session's wvkbd instance and persist its native input-method mode.
 set -eu
 
 runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
-state="$runtime/willow-keyboard-visible"
-signal_keyboard() {
-    pkill -"$1" -x wvkbd-mobintl
+config=${XDG_CONFIG_HOME:-$HOME/.config}/willow
+mode_file="$config/keyboard-mode"
+visible_file="$runtime/willow-keyboard-visible"
+
+read_mode() {
+    mode=manual
+    if [ -r "$mode_file" ]; then
+        IFS= read -r mode <"$mode_file" || mode=manual
+    fi
+    case $mode in auto|manual) ;; *) mode=manual ;; esac
 }
+
+keyboard_visible() {
+    if [ "${mode:-manual}" = auto ]; then
+        layers=$(hyprctl -i 0 -j layers 2>/dev/null) || return 1
+        if printf '%s' "$layers" | grep -Eq '"namespace"[[:space:]]*:[[:space:]]*"wvkbd"'; then
+            printf 'visible\n'
+        else
+            printf 'hidden\n'
+        fi
+    elif [ -r "$visible_file" ]; then
+        cat "$visible_file"
+    else
+        printf 'hidden\n'
+    fi
+}
+
 write_visible() {
-    temporary="$state.$$"
+    temporary="$visible_file.$$"
     printf 'visible\n' >"$temporary"
-    mv -f "$temporary" "$state"
+    mv -f "$temporary" "$visible_file"
+}
+
+launch_keyboard() {
+    read_mode
+    set -- -H 310 --bottom-margin 30 --hidden --wayland-layer top
+    [ "$mode" != auto ] || set -- "$@" --auto
+    # Keep one lock for the keyboard process lifetime; the PID check below this
+    # command's caller is useful feedback, while flock closes the launch race.
+    exec flock -n "$runtime/willow-keyboard.lock" wvkbd-mobintl "$@"
+}
+
+restart_keyboard() {
+    pkill -TERM -x wvkbd-mobintl 2>/dev/null || :
+    attempt=0
+    while pgrep -x wvkbd-mobintl >/dev/null 2>&1 && [ "$attempt" -lt 20 ]; do
+        sleep 0.1
+        attempt=$((attempt + 1))
+    done
+    if pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
+        echo 'willow-keyboard: existing keyboard did not exit' >&2
+        return 1
+    fi
+    rm -f "$visible_file"
+    setsid -f sh -c 'exec /usr/local/bin/willow-keyboard launch' </dev/null >/dev/null 2>&1
 }
 
 case ${1:-} in
+    launch)
+        if pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
+            exit 0
+        fi
+        launch_keyboard
+        ;;
     reset)
-        rm -f "$state"
+        rm -f "$visible_file"
         ;;
     status)
-        if [ -r "$state" ]; then cat "$state"; else printf 'hidden\n'; fi
-        ;;
-    show)
-        if [ ! -r "$state" ]; then
-            signal_keyboard USR2
-            write_visible
+        read_mode
+        printf 'mode=%s\n' "$mode"
+        if visible=$(keyboard_visible); then
+            printf 'visible=%s\n' "$visible"
+        else
+            printf 'visible=unknown\n'
         fi
         ;;
+    mode)
+        case ${2:-status} in
+            status) read_mode; printf '%s\n' "$mode" ;;
+            auto|manual)
+                mkdir -p "$config"
+                temporary="$mode_file.$$"
+                printf '%s\n' "$2" >"$temporary"
+                mv -f "$temporary" "$mode_file"
+                restart_keyboard
+                ;;
+            *) echo 'usage: willow-keyboard mode [auto|manual|status]' >&2; exit 2 ;;
+        esac
+        ;;
+    show)
+        pkill -USR2 -x wvkbd-mobintl
+        write_visible
+        ;;
     hide)
-        signal_keyboard USR1 || :
-        rm -f "$state"
+        pkill -USR1 -x wvkbd-mobintl || :
+        rm -f "$visible_file"
         ;;
     toggle)
-        if [ -r "$state" ]; then
-            signal_keyboard USR1
-            rm -f "$state"
+        read_mode
+        visible=$(keyboard_visible 2>/dev/null || printf 'unknown')
+        if [ "$visible" = visible ]; then
+            pkill -USR1 -x wvkbd-mobintl
+            rm -f "$visible_file"
         else
-            signal_keyboard USR2
+            pkill -USR2 -x wvkbd-mobintl
             write_visible
         fi
         ;;
     *)
-        echo 'usage: willow-keyboard reset|status|show|hide|toggle' >&2
+        echo 'usage: willow-keyboard launch|reset|status|mode [auto|manual|status]|show|hide|toggle' >&2
         exit 2
         ;;
 esac

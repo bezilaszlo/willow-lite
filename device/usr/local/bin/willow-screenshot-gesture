@@ -149,6 +149,7 @@ sub run {
     my $travel = int(y_range($fh) / 10);
     $SIG{CHLD} = 'IGNORE';
     pump($fh, WillowSwipe->new(travel => $travel), sub {
+        return if -e "$runtime/willow-session-locked";
         my $pid = fork;
         if (defined $pid && $pid == 0) {
             exec('willow-screenshot') or die "willow-screenshot-gesture: cannot run willow-screenshot: $!\n";

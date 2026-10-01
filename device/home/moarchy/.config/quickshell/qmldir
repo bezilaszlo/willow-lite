@@ -4,6 +4,9 @@ Theme 1.0 Theme.qml
 HomeScreen 1.0 HomeScreen.qml
 AppDrawer 1.0 AppDrawer.qml
 StatusBar 1.0 StatusBar.qml
+ControlCenter 1.0 ControlCenter.qml
+LockScreen 1.0 LockScreen.qml
+LockScreenContent 1.0 LockScreenContent.qml
 Overview 1.0 Overview.qml
 BackGesture 1.0 BackGesture.qml
 PowerMenu 1.0 PowerMenu.qml

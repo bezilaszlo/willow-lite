@@ -2,18 +2,24 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "."
 
 Scope {
     id: root
     property var panels: []
+    property bool enabled: true
+    property bool previewMode: false
+    property bool escapeEnabled: true
     property bool keyboardVisible: false
     property bool keyboardStateReady: false
     property int bandWidth: 24
     property int commitDistance: 72
-    readonly property color accent: "#55d6c2"
+    readonly property color accent: ThemeStore.accent
     signal hideKeyboardRequested()
 
     function back() {
+        if (!root.enabled)
+            return;
         if (root.keyboardVisible || !root.keyboardStateReady) {
             root.hideKeyboardRequested();
             return;
@@ -27,13 +33,14 @@ Scope {
                 return;
             }
         }
-        if (ToplevelManager.activeToplevel)
+        if (!root.previewMode && root.escapeEnabled && ToplevelManager.activeToplevel)
             Quickshell.execDetached(["wtype", "-k", "Escape"]);
     }
 
     component Edge: PanelWindow {
         id: edge
         required property bool leftSide
+        visible: root.enabled
         anchors { top: true; bottom: true; left: leftSide; right: !leftSide }
         implicitWidth: root.bandWidth + 40
         exclusiveZone: 0
@@ -101,12 +108,12 @@ Scope {
             width: 44; height: 44; radius: 22
             x: edge.leftSide ? shown - width : edge.width - shown
             y: Math.max(0, Math.min(edge.height - height, drag.startY - height / 2))
-            color: drag.armed || (!drag.pressed && drag.releaseArmed) ? root.accent : "#c91b302e"
+            color: drag.armed || (!drag.pressed && drag.releaseArmed) ? root.accent : ThemeStore.selection
             scale: drag.armed || (!drag.pressed && drag.releaseArmed) ? 1.05 : 0.92
             Behavior on scale { NumberAnimation { duration: 110 } }
             opacity: drag.pressed ? 1 : (drag.settling ? drag.settleFactor : 0)
             Behavior on opacity { NumberAnimation { duration: 120 } }
-            Text { anchors.centerIn: parent; text: edge.leftSide ? "‹" : "›"; color: "#071316"; font.pixelSize: 30; font.weight: Font.Medium }
+            Text { anchors.centerIn: parent; text: edge.leftSide ? "‹" : "›"; color: ThemeStore.darkerBackground; font.family: ThemeStore.fontFamily; font.pixelSize: 30; font.weight: Font.Medium }
         }
     }
 

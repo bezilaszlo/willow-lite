@@ -22,6 +22,7 @@ Scope {
     signal dismissRequested()
     signal controlCenterRequested()
     signal appRequested(var entry)
+    signal runningAppRequested(var app)
     signal commandRequested(string text)
 
     function appName(app) { return typeof app === "string" ? app : (app.name || "App") }
@@ -174,6 +175,7 @@ Scope {
                             verticalAlignment: TextInput.AlignVCenter
                             selectByMouse: true
                             clip: true
+                            onActiveFocusChanged: if (activeFocus) root.keyboardRequested()
                             Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; text: "open an app or run a command"; color: ThemeStore.darkForeground; font: prompt.font; visible: !prompt.text && !prompt.activeFocus }
                             function submit() {
                                 const typed = prompt.text.trim()
@@ -213,6 +215,10 @@ Scope {
                 anchors.fill: parent
                 onClicked: {
                     const app = parent.app
+                    if (parent.running) {
+                        root.runningAppRequested(app)
+                        return
+                    }
                     const entry = app.desktopEntry || app.entry || root.findApp(root.appName(app))
                     if (entry) root.appRequested(entry)
                     else root.commandRequested(root.appName(app))

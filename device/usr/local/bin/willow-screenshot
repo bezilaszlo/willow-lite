@@ -1,8 +1,11 @@
 #!/bin/sh
 # Capture the current display and show a short Quickshell confirmation.
 set -eu
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+[ ! -e "$runtime/willow-session-locked" ] || exit 0
 dir="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
 mkdir -p "$dir"
 out="$dir/screenshot-$(date +%Y%m%d-%H%M%S).png"
+[ ! -e "$runtime/willow-session-locked" ] || exit 0
 grim "$out"
 WILLOW_SCREENSHOT="$out" exec qs -p "$HOME/.config/quickshell/willow-screenshot-flash.qml" >/dev/null 2>&1

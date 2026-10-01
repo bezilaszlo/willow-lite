@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
+mkdir -p "$ROOT/out"
+mkdir -p "$ROOT/out/preview-config"
 
 command -v sway >/dev/null || { echo "Install Sway with: omarchy pkg add sway" >&2; exit 1; }
 command -v qs >/dev/null || { echo "Quickshell (qs) is required" >&2; exit 1; }
@@ -12,7 +14,7 @@ test -f /usr/lib/girepository-1.0/GtkVnc-2.0.typelib || { echo "Install gtk-vnc 
 
 display_file="$ROOT/out/preview-wayland-display"
 : > "$display_file"
-env XDG_SESSION_TYPE=wayland WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 WLR_LIBINPUT_NO_DEVICES=1 sway --config "$ROOT/preview/sway.conf" &
+env -u HYPRLAND_INSTANCE_SIGNATURE WILLOW_SOURCE_ROOT="$ROOT" XDG_CONFIG_HOME="$ROOT/out/preview-config" XDG_SESSION_TYPE=wayland WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 WLR_LIBINPUT_NO_DEVICES=1 sway --config "$ROOT/preview/sway.conf" &
 preview_pid=$!
 vnc_pid=
 viewer_pid=

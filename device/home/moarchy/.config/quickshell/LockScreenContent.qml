@@ -68,19 +68,6 @@ Item {
         visible: root.awake
         z: 5
 
-        Text {
-            x: 24
-            width: 86
-            height: parent.height
-            text: root.clockText
-            color: ThemeStore.brightForeground
-            font.family: ThemeStore.fontFamily
-            font.pixelSize: 14
-            font.weight: Font.DemiBold
-            verticalAlignment: Text.AlignVCenter
-            Accessible.name: "Device time " + root.clockText
-        }
-
         Row {
             anchors { right: parent.right; rightMargin: 24; top: parent.top; bottom: parent.bottom }
             spacing: 8
