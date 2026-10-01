@@ -1,0 +1,76 @@
+#!/bin/sh
+set -eu
+
+backlight=/sys/class/backlight/ktd3136-backlight
+brightness=$backlight/brightness
+maximum=$backlight/max_brightness
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+saved=$runtime_dir/willow-lock-brightness
+
+fail() {
+    echo "willow-lock-display: $*" >&2
+    exit 1
+}
+
+read_level() {
+    [ -r "$1" ] || fail "cannot read $1"
+    value=$(cat "$1")
+    case $value in
+        ''|*[!0-9]*) fail "invalid brightness value in $1" ;;
+    esac
+    printf '%s\n' "$value"
+}
+
+write_level() {
+    value=$1
+    case $value in
+        ''|*[!0-9]*) fail 'brightness must be a non-negative integer' ;;
+    esac
+    printf '%s\n' "$value" | sudo -n /usr/bin/tee "$brightness" >/dev/null \
+        || fail 'brightness write failed (saved restore value retained)'
+    actual=$(read_level "$brightness")
+    [ "$actual" = "$value" ] || fail "brightness readback mismatch ($actual != $value)"
+}
+
+[ -d "$runtime_dir" ] || fail "runtime directory unavailable: $runtime_dir"
+max=$(read_level "$maximum")
+
+case ${1:-} in
+    dim)
+        current=$(read_level "$brightness")
+        if [ ! -e "$saved" ]; then
+            [ "$current" -gt 0 ] || fail 'cannot save a nonzero restore brightness'
+            temp=$saved.$$
+            trap 'rm -f "$temp"' EXIT HUP INT TERM
+            umask 077
+            printf '%s\n' "$current" > "$temp"
+            mv -f -- "$temp" "$saved"
+        else
+            restore=$(read_level "$saved")
+            [ "$restore" -gt 0 ] && [ "$restore" -le "$max" ] \
+                || fail 'saved brightness is outside the valid range'
+        fi
+        write_level 0
+        ;;
+    restore)
+        [ -r "$saved" ] || fail 'no saved brightness to restore'
+        restore=$(read_level "$saved")
+        [ "$restore" -gt 0 ] && [ "$restore" -le "$max" ] \
+            || fail 'saved brightness is outside the valid range'
+        write_level "$restore"
+        rm -f -- "$saved"
+        ;;
+    status)
+        current=$(read_level "$brightness")
+        if [ -r "$saved" ]; then
+            restore=$(read_level "$saved")
+            printf 'brightness=%s max=%s restore=%s\n' "$current" "$max" "$restore"
+        else
+            printf 'brightness=%s max=%s restore=none\n' "$current" "$max"
+        fi
+        ;;
+    *)
+        echo 'usage: willow-lock-display dim|restore|status' >&2
+        exit 2
+        ;;
+esac
