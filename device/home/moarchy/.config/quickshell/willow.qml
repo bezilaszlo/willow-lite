@@ -22,6 +22,9 @@ ShellRoot {
     property bool powerHoldTriggered: false
     property bool pressStartedWithMenu: false
     property bool powerButtonReady: false
+    property int powerKeyDownCount: 0
+    property int powerKeyUpCount: 0
+    property string lastPowerAction: "none"
     property bool recoveringLock: false
     property bool lockRecoveryBlocked: false
     property bool homeInitiallyVisible: ToplevelManager.toplevels.values.length === 0
@@ -61,6 +64,9 @@ ShellRoot {
         property bool lockAwake: lock.awake
         property bool lockDark: lock.dark
         property bool lockRecoveryBlocked: root.lockRecoveryBlocked
+        property int powerKeyDownCount: root.powerKeyDownCount
+        property int powerKeyUpCount: root.powerKeyUpCount
+        property string lastPowerAction: root.lastPowerAction
         property int brightness: root.brightness
         property int maximumBrightness: root.maximumBrightness
         property bool brightnessControlAvailable: root.brightnessControlAvailable
@@ -426,19 +432,34 @@ ShellRoot {
                 if (data === "ready") {
                     root.powerButtonReady = true;
                 } else if (data === "down" && root.powerButtonReady) {
+                    root.powerKeyDownCount++;
+                    root.lastPowerAction = "down";
                     root.powerHoldTriggered = false;
                     root.pressStartedWithMenu = lock.active ? lock.powerMenuVisible : powerMenu.visible;
                     powerHold.start();
                 } else if (data === "up" && root.powerButtonReady) {
+                    root.powerKeyUpCount++;
                     powerHold.stop();
-                    if (root.powerHoldTriggered)
+                    if (root.powerHoldTriggered) {
+                        root.lastPowerAction = "hold-release";
                         return;
+                    }
                     if (root.pressStartedWithMenu) {
                         if (lock.active) lock.powerMenuVisible = false;
                         else powerMenu.visible = false;
-                    }
-                    else
+                        root.lastPowerAction = "menu-dismiss";
+                    } else if (lock.active && lock.secure) {
+                        if (lock.dark) {
+                            lock.wake();
+                            root.lastPowerAction = "wake";
+                        } else {
+                            lock.dim();
+                            root.lastPowerAction = "dim";
+                        }
+                    } else {
+                        root.lastPowerAction = "lock";
                         root.beginLock();
+                    }
                 }
             }
         }

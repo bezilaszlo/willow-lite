@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-10-01
+- Route a short power-key release to wake a secure dark lock or dim an awake one; retain the two-second hold menu and expose read-only button event/action counters.
 - Wake the secure lock on the first single touch, including a swipe, while consuming that contact so it cannot also unlock; add a guarded wake-only recovery IPC.
 - Fix secure-lock release using Quickshell's writable lock property and use the documented SSH brightness restore when recovery is needed. Disable the manual brightness slider while the kernel backlight mapping is inconsistent. Physical wake behavior remains unverified.
 - Make session sync restart and verify the new Quickshell engine, preserving the current Home view; deployments refuse to run while the session-lock marker exists.
