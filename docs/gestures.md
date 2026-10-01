@@ -6,7 +6,7 @@ The touchscreen is mapped to the single display. Sway's `bindgesture` is touchpa
 |---|---|---|
 | Exactly three fingers down | Save a full-screen PNG to `~/Pictures/Screenshots/`, flash the screen, show a "Screenshot saved" notice. One, two, or four fingers do not trigger it. | User confirmed screenshot worked; finger-count exclusions unverified |
 | Pull from the left or right edge | Cancellable Back. See below. | User confirmed one left-edge swipe worked; cancel/right-edge behavior unverified |
-| Swipe up from the bottom edge | Open the running-app selector; its panel follows the finger. Tap a card to focus it, or swipe that card up to close it. Choose Home to return to the launcher. | The first strip sat above wvkbd. It is now a 30px Overlay at the physical bottom above Top-layer wvkbd; its area overlaps the keyboard's bottom 30px. Physical swipe and bottom-row key access retest pending |
+| Swipe up from the bottom edge | Open the running-app selector; its panel follows the finger. Tap a card to focus it, or swipe that card up to close it. Choose Home to return to the launcher. | With the keyboard shown on the 540×1170 output, `wvkbd` occupies y=830–1140, the gesture strip y=1140–1170, and tiled apps end at y=830. The 30px margin avoids overlaying the keyboard's spacebar row; physical swipe and spacebar retest are pending. |
 
 ## Back
 
@@ -32,7 +32,7 @@ The gesture branches were written for Sway. Most of their code uses Wayland prot
 | Branch feature | Sway-specific part | Hyprland equivalent (0.56, Lua config) |
 |---|---|---|
 | Three-finger screenshot | Started with `exec` in the Sway config. The evdev reader and `grim` need no compositor support; grim uses wlr-screencopy, which Hyprland also offers. | `hl.exec_cmd(...)` inside `hl.on("hyprland.start", ...)` in `willow.lua` |
-| Back gesture | `wtype -k Escape` (virtual-keyboard, works on both). The keyboard is detected from the band's height, which relies on the compositor shrinking non-exclusive layer surfaces by other exclusive zones. | Hyprland arranges layers the same way, but this is not yet measured with wvkbd on Hyprland. `hyprctl -j layers`, which lists the `wvkbd` namespace, is a direct test. |
+| Back gesture | `wtype -k Escape` (virtual-keyboard, works on both). The keyboard is detected from the band's height, which relies on the compositor shrinking non-exclusive layer surfaces by other exclusive zones. | On Hyprland 0.56, measured `hyprctl -j layers` geometry confirms non-exclusive Quickshell surfaces shrink with the shown wvkbd layer and its bottom margin. |
 | Overview | `import Quickshell.I3`, `swaymsg -r -t get_tree` for the window list and focus order, `I3.dispatch("[con_id=N] focus")` and `"[con_id=N] kill"`, thumbnails from `grim -T <foreign-toplevel id>` | `import Quickshell.Hyprland`: `Hyprland.toplevels` (focus history via `HyprlandToplevel.lastIpcObject.focusHistoryID`), `Hyprland.dispatch('hl.dsp.focus({ window = "address:0x…" })')` and `'hl.dsp.window.close({ window = "address:0x…" })'`, and thumbnails from `ScreencopyView { captureSource: hyprlandToplevel.wayland; live: false }` over Hyprland's toplevel export |
 | Apps switcher on `main` | `Toplevel.activate()` does nothing on Sway 1.12 | It does nothing on Hyprland 0.56 either, even with `misc.focus_on_activate`. Focus with the `hl.dsp.focus` dispatch above. `Toplevel.close()` works. |
 
@@ -44,4 +44,4 @@ Hyprland 0.56 rejects `hyprctl keyword` under a Lua config; runtime changes go t
 
 - Feel tuning with real fingers: edge band width (24 px), Back threshold (72 px), and bottom gesture travel.
 - The bottom strip and side Back strips overlap at the corners.
-- Physical validation remains pending for screenshot, Back, selector, card dismissal, launcher actions, and keyboard interaction after shell reload.
+- Physical validation remains pending for bottom selector, card dismissal, launcher actions, and the keyboard's spacebar after the margin change. Screenshot capture and one left-edge Back swipe were user-confirmed; screenshot finger-count exclusions and other Back directions/cancellation remain unverified.

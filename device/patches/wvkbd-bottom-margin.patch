@@ -1,0 +1,61 @@
+diff --git a/main.c b/main.c
+index 9e2aa7f..0d1724a 100644
+--- a/main.c
++++ b/main.c
+@@ -5,6 +5,7 @@
+ #include "proto/viewporter-client-protocol.h"
+ #include "proto/input-method-unstable-v2-protocol.h"
+ #include <errno.h>
++#include <limits.h>
+ #include <linux/input-event-codes.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -74,6 +75,7 @@
+ static uint32_t height, normal_height, landscape_height;
+ static int rounding = DEFAULT_ROUNDING;
+ static bool hidden = false;
+ static bool im_auto = false;
++static uint32_t bottom_margin = 0;
+ static uint32_t custom_width = 0;
+ static double width_ratio = 1.0;
+ static enum { DOCK_FULL = 0, DOCK_LEFT = 1, DOCK_RIGHT = 2 } dock_mode = DOCK_FULL;
+@@ -680,6 +682,7 @@
+     fprintf(stderr, "  -R [int]    - Rounding radius in pixels\n");
+     fprintf(stderr, "  --fn [font] - Set font (e.g: DejaVu Sans 20)\n");
+     fprintf(stderr, "  --hidden    - Start hidden (send SIGUSR2 to show)\n");
++    fprintf(stderr, "  --bottom-margin [int]   - Leave this many pixels below the keyboard\n");
+     fprintf(stderr, "  --no-popup             - Disable the key-press popup\n");
+     fprintf(stderr, "  --no-highlight         - Don't highlight a key while pressed\n");
+     fprintf(stderr, "  --no-feedback          - Disable all key-press feedback "
+@@ -827,7 +830,9 @@
+     }
+     zwlr_layer_surface_v1_set_size(layer_surface, req_w, height);
+     zwlr_layer_surface_v1_set_anchor(layer_surface, anchor);
++    zwlr_layer_surface_v1_set_margin(layer_surface, 0, 0, bottom_margin, 0);
+     if (keyboard.exclusive) {
++        /* Hyprland applies the bottom margin in addition to the zone. */
+         zwlr_layer_surface_v1_set_exclusive_zone(layer_surface, height);
+     }
+     zwlr_layer_surface_v1_set_keyboard_interactivity(layer_surface, false);
+     zwlr_layer_surface_v1_add_listener(layer_surface, &layer_surface_listener,
+@@ -1087,6 +1092,20 @@
+         } else if ((!strcmp(argv[i], "-hidden")) ||
+                    (!strcmp(argv[i], "--hidden"))) {
+             hidden = true;
++        } else if (!strcmp(argv[i], "--bottom-margin")) {
++            if (i >= argc - 1) {
++                usage(argv[0]);
++                exit(1);
++            }
++            char *end;
++            errno = 0;
++            long margin = strtol(argv[++i], &end, 10);
++            if (argv[i] == end || *end != '\0' || errno == ERANGE ||
++                margin < 0 || margin > INT_MAX) {
++                usage(argv[0]);
++                exit(1);
++            }
++            bottom_margin = (uint32_t)margin;
+         } else if ((!strcmp(argv[i], "-no-popup")) ||
+                    (!strcmp(argv[i], "--no-popup"))) {
+             keyboard.show_popup = false;

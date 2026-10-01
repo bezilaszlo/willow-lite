@@ -69,7 +69,7 @@ return function(device, session)
         hl.exec_cmd("qs -p " .. session.shell)
         hl.exec_cmd("sh -c 'pid=$(pgrep -n -x Hyprland); [ -n \"$pid\" ] && exec systemd-cat -t willow-screenshot willow-screenshot-gesture --session-pid \"$pid\"'")
         if session.keyboard then
-            hl.exec_cmd("wvkbd-mobintl -H 310 --hidden --wayland-layer top")
+            hl.exec_cmd("wvkbd-mobintl -H 310 --bottom-margin 30 --hidden --wayland-layer top")
         end
     end)
 end
