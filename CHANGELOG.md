@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-10-01
+- Wake the secure lock on the first single touch, including a swipe, while consuming that contact so it cannot also unlock; add a guarded wake-only recovery IPC.
 - Fix secure-lock release using Quickshell's writable lock property and use the documented SSH brightness restore when recovery is needed. Disable the manual brightness slider while the kernel backlight mapping is inconsistent. Physical wake behavior remains unverified.
 - Make session sync restart and verify the new Quickshell engine, preserving the current Home view; deployments refuse to run while the session-lock marker exists.
 - Deploy the redesigned native QML shell: persistent theme palettes, app drawer, control center, recents cards, gesture feedback, and session-lock visuals. The phone runs the new controller without a compositor/kernel restart; physical gestures and secure lock behavior remain unverified.

@@ -76,6 +76,10 @@ ShellRoot {
         property real lockTouchY: lock.lastTouchY
         function goHome() { root.showHome(); }
         function showKeyboard() { root.queueKeyboardAction("show"); }
+        function wakeLockedScreen() {
+            if (lock.active && lock.secure && lock.dark)
+                lock.wake();
+        }
     }
 
     function updateClock() {

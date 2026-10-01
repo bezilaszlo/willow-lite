@@ -161,7 +161,9 @@ Scope {
         if (ids.length === 1 && !root.gestureInvalid) {
             root.gestureWasDark = root.dark;
             root.gestureStartY = points[0].y;
-            if (!root.gestureWasDark)
+            if (root.gestureWasDark)
+                root.wake();
+            else
                 root.startGesture(points[0].y);
         } else {
             root.gestureInvalid = true;
@@ -174,8 +176,6 @@ Scope {
         if (root.activePointIds.length !== 1 || points.length === 0)
             return;
         if (root.gestureWasDark) {
-            if (Math.abs(points[0].y - root.gestureStartY) > 12)
-                root.gestureInvalid = true;
             return;
         }
         root.updateGesture(points[0].y);
