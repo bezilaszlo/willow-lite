@@ -48,6 +48,7 @@ Scope {
     signal unlocked()
     signal lockFailed()
     signal brightnessError(string message)
+    signal diagnosticEvent(string name, string detail)
     signal restartRequested()
     signal shutdownRequested()
     signal cancelPowerMenuRequested()
@@ -77,6 +78,7 @@ Scope {
             return;
         const queue = root.brightnessQueue.slice();
         root.activeBrightnessAction = queue.shift();
+        root.diagnosticEvent("brightness.started", root.activeBrightnessAction);
         root.brightnessQueue = queue;
         brightnessProcess.command = root.activeBrightnessAction === "restore"
             ? ["/usr/local/bin/willow-lock-display", "restore", String(root.restoreBrightness)]
@@ -87,12 +89,14 @@ Scope {
     function wake() {
         if (!root.active || !root.secure || !root.dark)
             return;
+        diagnosticEvent("brightness.request", "restore");
         root.queueBrightness("restore");
     }
 
     function dim() {
         if (!root.active || !root.secure || root.powerMenuVisible)
             return;
+        diagnosticEvent("brightness.request", "dim");
         root.darkState = true;
         root.queueBrightness("dim");
     }
@@ -205,6 +209,7 @@ Scope {
     }
 
     onActiveChanged: {
+        diagnosticEvent("lock.active", String(root.active));
         if (root.active)
             root.beginLock();
         else {
@@ -215,6 +220,9 @@ Scope {
                 sessionLock.locked = false;
         }
     }
+
+    onDarkStateChanged: diagnosticEvent("lock.dark", String(root.darkState));
+    onAwakeChanged: diagnosticEvent("lock.awake", String(root.awake));
 
     onPowerMenuVisibleChanged: {
         if (root.powerMenuVisible) {
@@ -254,6 +262,8 @@ Scope {
         onExited: exitCode => {
             const action = root.activeBrightnessAction;
             root.activeBrightnessAction = "";
+            root.diagnosticEvent("brightness.finished", action + " rc=" + exitCode
+                + " dark=" + root.darkState + " secure=" + root.secure);
             if (action === "restore")
                 root.restoreQueued = false;
 
@@ -349,6 +359,7 @@ Scope {
 
         onSecureChanged: {
             if (sessionLock.secure) {
+                root.diagnosticEvent("lock.secure", "true");
                 acquireTimeout.stop();
                 root.wasSecure = true;
                 root.darkState = true;
@@ -357,6 +368,7 @@ Scope {
         }
 
         onLockedChanged: {
+            root.diagnosticEvent("lock.protocol-locked", String(sessionLock.locked));
             if (!sessionLock.locked && root.wasSecure) {
                 root.wasSecure = false;
                 const restoreNeeded = root.darkState;

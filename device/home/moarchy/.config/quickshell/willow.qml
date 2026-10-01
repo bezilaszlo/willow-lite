@@ -25,12 +25,20 @@ ShellRoot {
     property int powerKeyDownCount: 0
     property int powerKeyUpCount: 0
     property string lastPowerAction: "none"
+    property bool lockAcquiring: false
+    property int eventSequence: 0
+    property var eventTimeline: []
     property bool recoveringLock: false
     property bool lockRecoveryBlocked: false
     property bool homeInitiallyVisible: ToplevelManager.toplevels.values.length === 0
     property var keyboardActionQueue: []
     property var applications: []
     property var runningApps: []
+    property string screenRecordingState: previewMode ? "unavailable" : "checking"
+    property string screenRecordingFile: ""
+    property int screenRecordingRemaining: 0
+    property int screenRecordingMaximum: 120
+    property bool screenRecordingActionPending: false
     property int brightness: 0
     property int maximumBrightness: 0
     property bool brightnessAvailable: false
@@ -41,7 +49,71 @@ ShellRoot {
     function helperPath(name) {
         return previewMode ? sourceRoot + "/device/usr/local/bin/" + name : "/usr/local/bin/" + name;
     }
+    function recordEvent(name, detail) {
+        const events = root.eventTimeline.slice();
+        const event = { sequence: ++root.eventSequence, name: name, detail: detail || "" };
+        events.push(event);
+        while (events.length > 64)
+            events.shift();
+        root.eventTimeline = events;
+        console.log("[willow-timeline] #" + event.sequence + " " + name
+                    + (event.detail ? " " + event.detail : ""));
+    }
+    function applyScreenRecordingStatus(output) {
+        const previousState = screenRecordingState;
+        const previousFile = screenRecordingFile;
+        const values = {};
+        for (const line of output.trim().split("\n")) {
+            const separator = line.indexOf("=");
+            if (separator > 0)
+                values[line.slice(0, separator)] = line.slice(separator + 1);
+        }
+        if (["recording", "idle", "unavailable", "locked"].includes(values.state))
+            screenRecordingState = values.state;
+        else
+            screenRecordingState = "unavailable";
+        if (values.file && values.file !== "none")
+            screenRecordingFile = values.file;
+        else if (screenRecordingState === "recording")
+            screenRecordingFile = "";
+        screenRecordingRemaining = Math.max(0, Number(values.remaining_seconds) || 0);
+        screenRecordingMaximum = Math.max(1, Number(values.max_seconds) || 120);
+        if (screenRecordingState !== previousState || screenRecordingFile !== previousFile)
+            recordEvent("screen-record.state", "state=" + screenRecordingState);
+    }
+    function refreshScreenRecording() {
+        if (previewMode || screenRecordingStatus.running || screenRecordingAction.running
+                || screenRecordingActionPending)
+            return;
+        screenRecordingStatus.command = [helperPath("willow-screen-record"), "status"];
+        screenRecordingStatus.running = true;
+    }
+    function toggleScreenRecording() {
+        if (lock.active || lockAcquiring)
+            return;
+        if (previewMode) {
+            pillMessage = "Screen recording is disabled in preview";
+            return;
+        }
+        if (screenRecordingActionPending || screenRecordingAction.running || screenRecordingStatus.running)
+            return;
+        if (screenRecordingState === "recording") {
+            screenRecordingAction.command = [helperPath("willow-screen-record"), "stop"];
+            screenRecordingActionPending = true;
+            screenRecordingAction.running = true;
+            recordEvent("screen-record.stop-request", "");
+        } else if (screenRecordingState === "idle") {
+            screenRecordingAction.command = [helperPath("willow-screen-record"), "start"];
+            screenRecordingActionPending = true;
+            screenRecordingAction.running = true;
+            recordEvent("screen-record.start-request", "");
+        } else {
+            refreshScreenRecording();
+        }
+    }
     function requestPowerAction(action) {
+        if (lockAcquiring)
+            return;
         if (previewMode) {
             pillMessage = action === "restart" ? "Restart is disabled in preview" : "Power off is disabled in preview";
             return;
@@ -67,6 +139,11 @@ ShellRoot {
         property int powerKeyDownCount: root.powerKeyDownCount
         property int powerKeyUpCount: root.powerKeyUpCount
         property string lastPowerAction: root.lastPowerAction
+        property bool lockAcquiring: root.lockAcquiring
+        property string eventTimelineJson: JSON.stringify(root.eventTimeline)
+        property string screenRecordingState: root.screenRecordingState
+        property string screenRecordingFile: root.screenRecordingFile
+        property int screenRecordingRemaining: root.screenRecordingRemaining
         property int brightness: root.brightness
         property int maximumBrightness: root.maximumBrightness
         property bool brightnessControlAvailable: root.brightnessControlAvailable
@@ -117,8 +194,9 @@ ShellRoot {
         systemText = batteryText + " · " + (networkAddress || networkText) + " · " + windows.length + " open";
     }
     function openControlCenter() {
-        if (lock.active)
+        if (lock.active || lockAcquiring)
             return;
+        refreshScreenRecording();
         if (keyboardMode === "manual")
             queueKeyboardAction("hide");
         drawer.visible = false;
@@ -127,7 +205,7 @@ ShellRoot {
     }
     function closeControlCenter() { controlCenter.close(); }
     function showHome() {
-        if (lock.active)
+        if (lock.active || lockAcquiring)
             return;
         overview.close();
         controlCenter.close();
@@ -138,7 +216,7 @@ ShellRoot {
         home.visible = true;
     }
     function showOverview() {
-        if (lock.active)
+        if (lock.active || lockAcquiring)
             return;
         controlCenter.close();
         drawer.visible = false;
@@ -148,7 +226,7 @@ ShellRoot {
         overview.open();
     }
     function openDrawer() {
-        if (lock.active)
+        if (lock.active || lockAcquiring)
             return;
         if (keyboardMode === "manual")
             queueKeyboardAction("hide");
@@ -157,6 +235,8 @@ ShellRoot {
         drawer.visible = true;
     }
     function selectKeyboardMode(mode) {
+        if (lock.active || lockAcquiring)
+            return;
         if (previewMode) {
             pillMessage = "Keyboard mode is disabled in preview";
             return;
@@ -175,16 +255,23 @@ ShellRoot {
         }
         if (lock.active || lockMarker.running)
             return;
+        recordEvent("lock.request", "home=" + home.visible
+                    + " terminal=" + terminal.running
+                    + " windows=" + ToplevelManager.toplevels.values.length);
+        lockAcquiring = true;
         powerMenu.visible = false;
         controlCenter.close();
         drawer.visible = false;
         overview.close();
-        home.visible = false;
+        // Keep the foreground Home surface until native lock coverage is secure.
+        home.visible = true;
         queueKeyboardAction("hide");
         lockMarker.command = [helperPath("willow-session-lock-state"), "locked"];
         lockMarker.running = true;
     }
     function launchCommand(text) {
+        if (lock.active || lockAcquiring)
+            return;
         if (previewMode) {
             pillMessage = "Commands are disabled in preview";
             return;
@@ -267,6 +354,7 @@ ShellRoot {
             keyboardState.running = true;
             brightnessRead.running = true;
             lockState.running = true;
+            refreshScreenRecording();
         }
     }
     Timer {
@@ -294,8 +382,46 @@ ShellRoot {
             }
         }
     }
+    Process {
+        id: screenRecordingStatus
+        command: [root.helperPath("willow-screen-record"), "status"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: root.applyScreenRecordingStatus(text)
+        }
+        onExited: exitCode => {
+            if (exitCode !== 0 && root.screenRecordingState === "checking")
+                root.screenRecordingState = "unavailable";
+        }
+    }
+    Process {
+        id: screenRecordingAction
+        command: [root.helperPath("willow-screen-record"), "status"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: root.applyScreenRecordingStatus(text)
+        }
+        onExited: exitCode => {
+            root.screenRecordingActionPending = false;
+            root.recordEvent("screen-record.action-finished", "rc=" + exitCode
+                + " state=" + root.screenRecordingState);
+            Qt.callLater(() => root.refreshScreenRecording());
+        }
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: !root.previewMode && root.screenRecordingState === "recording"
+        onTriggered: root.refreshScreenRecording()
+    }
 
-    Process { id: terminal; command: ["foot"]; running: false }
+    Process {
+        id: terminal
+        command: ["foot"]
+        running: false
+        onRunningChanged: root.recordEvent("terminal.running", String(running))
+        onExited: exitCode => root.recordEvent("terminal.exited", "rc=" + exitCode)
+    }
     Process {
         id: keyboardState
         command: [root.helperPath("willow-keyboard"), "status"]
@@ -367,11 +493,15 @@ ShellRoot {
         id: lockMarker
         command: [root.helperPath("willow-session-lock-state"), "locked"]
         running: false
-        onExited: {
+        onExited: exitCode => {
+            root.recordEvent("lock.marker-finished", "rc=" + exitCode);
             if (exitCode === 0)
                 lock.active = true;
-            else
+            else {
+                root.lockAcquiring = false;
+                root.lockRecoveryBlocked = true;
                 root.pillMessage = "Lock could not start";
+            }
         }
     }
     Process {
@@ -431,9 +561,11 @@ ShellRoot {
             onRead: data => {
                 if (data === "ready") {
                     root.powerButtonReady = true;
+                    root.recordEvent("power.reader-ready", "");
                 } else if (data === "down" && root.powerButtonReady) {
                     root.powerKeyDownCount++;
                     root.lastPowerAction = "down";
+                    root.recordEvent("power.down", "count=" + root.powerKeyDownCount);
                     root.powerHoldTriggered = false;
                     root.pressStartedWithMenu = lock.active ? lock.powerMenuVisible : powerMenu.visible;
                     powerHold.start();
@@ -442,22 +574,27 @@ ShellRoot {
                     powerHold.stop();
                     if (root.powerHoldTriggered) {
                         root.lastPowerAction = "hold-release";
+                        root.recordEvent("power.hold-release", "count=" + root.powerKeyUpCount);
                         return;
                     }
                     if (root.pressStartedWithMenu) {
                         if (lock.active) lock.powerMenuVisible = false;
                         else powerMenu.visible = false;
                         root.lastPowerAction = "menu-dismiss";
+                        root.recordEvent("power.menu-dismiss", "count=" + root.powerKeyUpCount);
                     } else if (lock.active && lock.secure) {
                         if (lock.dark) {
                             lock.wake();
                             root.lastPowerAction = "wake";
+                            root.recordEvent("power.wake", "dark=true");
                         } else {
                             lock.dim();
                             root.lastPowerAction = "dim";
+                            root.recordEvent("power.dim", "dark=false");
                         }
                     } else {
                         root.lastPowerAction = "lock";
+                        root.recordEvent("power.lock", "active=" + lock.active + " secure=" + lock.secure);
                         root.beginLock();
                     }
                 }
@@ -468,6 +605,8 @@ ShellRoot {
         id: powerHold
         interval: 2000
         onTriggered: {
+            if (root.lockAcquiring)
+                return;
             root.powerHoldTriggered = true;
             if (lock.active) {
                 lock.wake();
@@ -498,6 +637,7 @@ ShellRoot {
         runningApps: root.runningApps
         applications: root.applications
         onTerminalRequested: {
+            if (lock.active || root.lockAcquiring) return;
             if (root.previewMode) root.pillMessage = "App launch is disabled in preview";
             else {
                 home.visible = false;
@@ -507,15 +647,18 @@ ShellRoot {
         }
         onOverviewRequested: root.showOverview()
         onKeyboardRequested: {
-            if (root.keyboardMode === "manual") root.queueKeyboardAction("show");
+            if (!lock.active && !root.lockAcquiring && root.keyboardMode === "manual")
+                root.queueKeyboardAction("show");
         }
         onDrawerRequested: root.openDrawer()
         onControlCenterRequested: root.openControlCenter()
         onAppRequested: entry => {
+            if (lock.active || root.lockAcquiring) return;
             if (root.previewMode) root.pillMessage = "App launch is disabled in preview";
             else { entry.execute(); home.visible = false; }
         }
         onRunningAppRequested: app => {
+            if (lock.active || root.lockAcquiring) return;
             if (root.previewMode) {
                 root.pillMessage = "App focus is disabled in preview";
                 return;
@@ -527,12 +670,12 @@ ShellRoot {
             home.visible = false;
         }
         onCommandRequested: text => root.launchCommand(text)
-        onDismissRequested: home.visible = false
+        onDismissRequested: if (!lock.active && !root.lockAcquiring) home.visible = false
     }
     Overview {
         id: overview
         homeVisible: home.visible
-        gestureEnabled: !lock.active
+        gestureEnabled: !lock.active && !root.lockAcquiring
         previewMode: root.previewMode
         onHomeRequested: root.showHome()
         onDrawerRequested: root.openDrawer()
@@ -542,6 +685,7 @@ ShellRoot {
         applications: root.applications
         runningIds: root.runningApps.map(app => app.id)
         onActivate: entry => {
+            if (lock.active || root.lockAcquiring) return;
             if (root.previewMode) root.pillMessage = "App launch is disabled in preview";
             else { entry.execute(); drawer.visible = false; home.visible = false; }
         }
@@ -559,15 +703,24 @@ ShellRoot {
         maximumBrightness: root.maximumBrightness
         brightnessAvailable: root.brightnessAvailable
         brightnessControlEnabled: root.brightnessControlAvailable
+        recordingState: root.screenRecordingState
+        recordingFile: root.screenRecordingFile
+        recordingRemaining: root.screenRecordingRemaining
+        recordingActionPending: root.screenRecordingActionPending || screenRecordingStatus.running
         keyboardVisible: root.keyboardVisible
         keyboardMode: root.keyboardMode
         onBrightnessRequested: value => root.setBrightness(value)
         onKeyboardModeRequested: mode => root.selectKeyboardMode(mode)
-        onKeyboardVisibilityRequested: root.queueKeyboardAction(root.keyboardVisible ? "hide" : "show")
+        onKeyboardVisibilityRequested: {
+            if (!lock.active && !root.lockAcquiring)
+                root.queueKeyboardAction(root.keyboardVisible ? "hide" : "show");
+        }
         onScreenshotRequested: {
+            if (lock.active || root.lockAcquiring) return;
             if (root.previewMode) root.pillMessage = "Screenshot is disabled in preview";
             else Quickshell.execDetached([root.helperPath("willow-screenshot")]);
         }
+        onScreenRecordingToggleRequested: root.toggleScreenRecording()
         onRestartRequested: root.requestPowerAction("restart")
         onShutdownRequested: root.requestPowerAction("shutdown")
     }
@@ -584,6 +737,8 @@ ShellRoot {
         dateText: root.dateText
         systemText: root.systemText
         onUnlocked: {
+            root.recordEvent("lock.unlocked", "secure=" + lock.secure);
+            root.lockAcquiring = false;
             root.recoveringLock = false;
             root.lockRecoveryBlocked = false;
             unlockMarker.running = true;
@@ -591,6 +746,8 @@ ShellRoot {
             Qt.callLater(() => root.showHome());
         }
         onLockFailed: {
+            root.recordEvent("lock.acquire-failed", "secure=" + lock.secure);
+            root.lockAcquiring = false;
             // The marker is the crash-recovery gate. Keep it for every failed lock attempt;
             // clearing it here could expose the session after a shell restart.
             root.recoveringLock = true;
@@ -599,6 +756,7 @@ ShellRoot {
             root.pillMessage = "Session lock unavailable; recovery required";
         }
         onBrightnessError: message => root.pillMessage = message
+        onDiagnosticEvent: (name, detail) => root.recordEvent(name, detail)
         onRestartRequested: root.requestPowerAction("restart")
         onShutdownRequested: root.requestPowerAction("shutdown")
         onCancelPowerMenuRequested: lock.powerMenuVisible = false
@@ -607,6 +765,9 @@ ShellRoot {
         target: lock
         function onSecureChanged() {
             if (lock.secure) {
+                root.recordEvent("lock.secure", "active=" + lock.active);
+                root.lockAcquiring = false;
+                home.visible = false;
                 root.recoveringLock = false;
                 root.lockRecoveryBlocked = false;
             }
@@ -643,10 +804,25 @@ ShellRoot {
             }
         }
     }
+    PanelWindow {
+        visible: root.lockAcquiring
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusiveZone: 0
+        color: "transparent"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "willow-lock-acquiring"
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            preventStealing: true
+            onPressed: mouse => { mouse.accepted = true; }
+            onClicked: mouse => { mouse.accepted = true; }
+        }
+    }
     BackGesture {
         keyboardVisible: root.keyboardVisible
         keyboardStateReady: root.keyboardStateReady
-        enabled: !lock.active
+        enabled: !lock.active && !root.lockAcquiring
         previewMode: root.previewMode
         escapeEnabled: !home.visible && !!ToplevelManager.activeToplevel
         panels: [powerMenu, controlCenter, drawer, overview]
@@ -657,11 +833,20 @@ ShellRoot {
         target: ToplevelManager.toplevels
         function onValuesChanged() {
             root.refreshApplications();
+            root.recordEvent("windows.changed", "count=" + ToplevelManager.toplevels.values.length);
+            if (root.lockAcquiring)
+                return;
             if (ToplevelManager.toplevels.values.length === 0) {
                 if (!lock.active) home.visible = true;
             } else if (home.visible) {
                 home.visible = false;
             }
+        }
+    }
+    Connections {
+        target: home
+        function onVisibleChanged() {
+            root.recordEvent("home.visible", String(home.visible));
         }
     }
     Connections {

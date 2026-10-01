@@ -18,6 +18,10 @@ Scope {
     property int maximumBrightness: 0
     property bool brightnessAvailable: false
     property bool brightnessControlEnabled: false
+    property string recordingState: "checking"
+    property string recordingFile: ""
+    property int recordingRemaining: 0
+    property bool recordingActionPending: false
     readonly property int minimumBrightness: Math.max(1, Math.ceil(maximumBrightness * 0.05))
     property bool keyboardVisible: false
     property string keyboardMode: "manual"
@@ -29,6 +33,7 @@ Scope {
     signal keyboardVisibilityRequested()
     signal rotationRequested()
     signal screenshotRequested()
+    signal screenRecordingToggleRequested()
     signal restartRequested()
     signal shutdownRequested()
 
@@ -218,7 +223,7 @@ Scope {
                                     spacing: 11
                                     Text { text: "☼"; color: ThemeStore.darkBackground; font.family: ThemeStore.fontFamily; font.pixelSize: 22; font.weight: Font.Bold }
                                     Text {
-                                        text: root.brightnessControlEnabled ? "Level · 5% minimum" : "Temporarily unavailable"
+                                        text: root.brightnessControlEnabled ? "Brightness · 5% minimum" : "Temporarily unavailable"
                                     color: root.brightnessControlEnabled ? ThemeStore.darkBackground : ThemeStore.foreground
                                         font.family: ThemeStore.fontFamily
                                         font.pixelSize: 12
@@ -233,6 +238,85 @@ Scope {
                                     onPressed: mouse => root.setBrightnessFromX(mouse.x)
                                     onPositionChanged: mouse => { if (pressed) root.setBrightnessFromX(mouse.x); }
                                 }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 88
+                        radius: 22
+                        color: ThemeStore.lighterBackground
+                        border.color: ThemeStore.selection
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.leftMargin: 17
+                            anchors.rightMargin: 17
+                            spacing: 12
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 118
+                                spacing: 5
+                                Text {
+                                    text: "SCREEN RECORDING"
+                                    color: ThemeStore.darkForeground
+                                    font.family: ThemeStore.fontFamily
+                                    font.pixelSize: 11
+                                    font.letterSpacing: 1.1
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: root.recordingState === "recording"
+                                        ? "Recording · " + root.recordingRemaining + "s left"
+                                        : root.recordingState === "idle" ? "Ready to record"
+                                        : root.recordingState === "locked" ? "Unavailable while locked"
+                                        : root.recordingState === "checking" ? "Checking recorder…"
+                                        : "Temporarily unavailable"
+                                    color: ThemeStore.foreground
+                                    font.family: ThemeStore.fontFamily
+                                    font.pixelSize: 13
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    visible: root.recordingFile.length > 0
+                                    text: root.recordingFile.split("/").pop()
+                                    color: ThemeStore.darkForeground
+                                    font.family: ThemeStore.fontFamily
+                                    font.pixelSize: 10
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 104
+                                height: 48
+                                radius: 20
+                                color: root.recordingState === "unavailable" || root.recordingState === "locked"
+                                    || root.recordingState === "checking" || root.recordingActionPending
+                                    ? ThemeStore.selection : ThemeStore.accent
+                                opacity: root.recordingState === "unavailable" || root.recordingState === "locked"
+                                    || root.recordingState === "checking" || root.recordingActionPending ? 0.65 : 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.recordingActionPending ? "Please wait"
+                                        : root.recordingState === "recording" ? "Stop" : "Record"
+                                    color: ThemeStore.darkerBackground
+                                    font.family: ThemeStore.fontFamily
+                                    font.pixelSize: 13
+                                    font.weight: Font.Medium
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: !root.recordingActionPending
+                                        && (root.recordingState === "idle" || root.recordingState === "recording")
+                                    onClicked: root.screenRecordingToggleRequested()
+                                }
+                                Accessible.name: root.recordingState === "recording" ? "Stop screen recording" : "Record screen"
+                                Accessible.role: Accessible.Button
                             }
                         }
                     }

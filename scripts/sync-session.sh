@@ -38,6 +38,7 @@ FILES=(
     device/usr/local/bin/willow-screenshot-gesture
     device/usr/local/bin/willow-session
     device/usr/local/bin/willow-session-lock-state
+    device/usr/local/bin/willow-screen-record
     device/usr/local/bin/willow-status
 )
 
@@ -71,7 +72,8 @@ sha256sum -c SHA256SUMS
 
 helpers=(willow-brightness willow-compositor willow-keyboard willow-lock-display
          willow-power-action willow-power-button willow-screenshot
-         willow-screenshot-gesture willow-session willow-session-lock-state willow-status)
+         willow-screenshot-gesture willow-session willow-session-lock-state
+         willow-screen-record willow-status)
 qml=(AppDrawer.qml BackGesture.qml ControlCenter.qml HomeScreen.qml LockScreen.qml
      LockScreenContent.qml Overview.qml PowerMenu.qml StatusBar.qml Theme.qml
      ThemeStore.qml qmldir willow-screenshot-flash.qml)

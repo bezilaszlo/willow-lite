@@ -2,6 +2,18 @@
 
 This task-owned status note tracks source, preview, deployment, and physical validation separately. The user-authored design brief and mockup remain the source of truth.
 
+## Current status — 2026-10-01
+
+This addendum supersedes older runtime and validation statements below where they differ.
+
+- The corrected LM3697 writer image `40d81fa94f1bad1a237882b7e2f174f0e013a377ef527edb247b47765112fdcb` was RAM-booted once. The user confirmed the screen and touch worked. One physical power-button dark/wake cycle also relit the screen, but the user described it as “kinda glitchy”; the nature and cause remain unconfirmed. No repeat cycle is claimed.
+- The user reported a terminal flash/close impression while locking from Home. Source review found no command that closes Foot on the lock path. The controller now keeps Home foreground until `WlSessionLock.secure`, places a transparent input blocker during acquisition, and logs terminal process/window, lock, brightness, and power events into a bounded sequence-only ring. This code was loaded during the secure-preserving reload below; a normal lock acquisition and the apparent terminal close behavior have not been physically rechecked.
+- An isolated host preview loaded the pending controller and shared lock-cover component. Captures are `out/pending-controller-preview/home.png`, `control-center.png`, and `lock-cover.png`. Quickshell reported `Configuration Loaded`; only the expected missing Hyprland-signature and IpcHandler change notifications appeared. This does not verify native lock behavior or physical display output.
+- The user-started bounded recorder is in Control Center. Helper commit `84d8af3` is installed at `/usr/local/bin/willow-screen-record` (root:root 0755, SHA-256 `3a42ecb43fc1306b84f5a1ad7dde6e87fd52bde199992934c3ee7c341d34b582`). In the locked session, its status returned `state=locked`, `secure=1`; no capture was started. The host has no `wf-recorder`, so capture/expiry verification is pending an unlocked phone window.
+- One secure-preserving Quickshell-only reload installed the reviewed `ControlCenter.qml`, `LockScreen.qml`, and `willow.qml` while retaining the lock marker. New QS PID 29562 reports `lockActive=true`, `lockSecure=true`, `lockAcquiring=false`, and recorder state `locked`; Hyprland PID 406 and kernel `7.2.0-willow+` were not restarted. The QML log at `/run/user/1000/quickshell/by-id/6tmyt9wlt/log.qslog` had no matches for TypeError, ReferenceError, QML error, or load-failure patterns. The lock remains active; no unlock, recording, or physical display check was performed.
+- The reload exposed a stale power-key inhibitor owned by old reader PID 542 from old QS PID 474: orphan inhibitor PID 548 and its reader descendants were verified by argv/tree and terminated. The current QS29562 reader/inhibitor chain remains; `systemd-inhibit --list` now shows one handle-power-key blocker. This one cleanup does not establish lifecycle cleanup across future reloads.
+- Runtime evidence is saved in `out/locked-ui-reload-20261001.txt`, `out/locked-ui-runtime-check-20261001.txt`, `out/locked-ui-errors-20261001.txt`, and `out/old-inhibitor-cleanup-20261001.txt`. The earlier power-cycle state snapshot is `out/power-cycle-state-20261001.txt`; device RTC and host time differ, so it does not establish precise wall-clock correlation.
+
 ## Current state
 
 - The redesigned QML shell is landed on `main` at `a55c54f` and deployed on 2026-10-01. The current session has Quickshell PID 197787 and Hyprland PID 402; kernel is unchanged. The exact staged deployment and earlier post-deploy observations are recorded in ignored artifact `out/redesign-deploy-20261001/post-deploy.txt`.
