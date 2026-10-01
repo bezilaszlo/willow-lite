@@ -31,6 +31,7 @@ ShellRoot {
     property int brightness: 0
     property int maximumBrightness: 0
     property bool brightnessAvailable: false
+    readonly property bool brightnessControlAvailable: false
     property int pendingBrightness: -1
     property string pillMessage: ""
 
@@ -44,6 +45,37 @@ ShellRoot {
         }
         if (action === "restart") restartRequest.running = true;
         else powerOff.running = true;
+    }
+
+    IpcHandler {
+        target: "willow"
+        property bool homeVisible: home.visible
+        property bool overviewVisible: overview.visible
+        property bool overviewTracking: overview.tracking
+        property bool drawerVisible: drawer.visible
+        property bool controlCenterVisible: controlCenter.visible
+        property bool keyboardVisible: root.keyboardVisible
+        property string keyboardMode: root.keyboardMode
+        property bool lockActive: lock.active
+        property bool lockSecure: lock.secure
+        property bool lockAwake: lock.awake
+        property bool lockDark: lock.dark
+        property bool lockRecoveryBlocked: root.lockRecoveryBlocked
+        property int brightness: root.brightness
+        property int maximumBrightness: root.maximumBrightness
+        property bool brightnessControlAvailable: root.brightnessControlAvailable
+        property int bottomPresses: overview.bottomPressCount
+        property int bottomMoves: overview.bottomMoveCount
+        property int bottomReleases: overview.bottomReleaseCount
+        property int bottomCancels: overview.bottomCancelCount
+        property int lockTouchPresses: lock.touchPressCount
+        property int lockTouchMoves: lock.touchMoveCount
+        property int lockTouchReleases: lock.touchReleaseCount
+        property int lockTouchCancels: lock.touchCancelCount
+        property real lockTouchX: lock.lastTouchX
+        property real lockTouchY: lock.lastTouchY
+        function goHome() { root.showHome(); }
+        function showKeyboard() { root.queueKeyboardAction("show"); }
     }
 
     function updateClock() {
@@ -169,7 +201,12 @@ ShellRoot {
             pillMessage = "Brightness writes are disabled in preview";
             return;
         }
-        pendingBrightness = value;
+        if (!brightnessControlAvailable) {
+            pillMessage = "Manual brightness control is temporarily unavailable";
+            return;
+        }
+        const minimum = Math.max(1, Math.ceil(maximumBrightness * 0.05));
+        pendingBrightness = Math.min(maximumBrightness, Math.max(minimum, value));
         brightnessDebounce.restart();
     }
     function runBrightnessWrite() {
@@ -334,7 +371,7 @@ ShellRoot {
     }
     Process {
         id: recoveryBrightness
-        command: [root.helperPath("willow-lock-display"), "restore"]
+        command: [root.helperPath("willow-lock-display"), "restore", "2047"]
         running: false
     }
     Process {
@@ -350,6 +387,8 @@ ShellRoot {
                 }
                 const current = Number(values.brightness);
                 const maximum = Number(values.max);
+                if (brightnessWrite.running || root.pendingBrightness >= 0)
+                    return;
                 root.brightnessAvailable = Number.isFinite(current) && Number.isFinite(maximum) && maximum > 0;
                 root.brightness = root.brightnessAvailable ? current : 0;
                 root.maximumBrightness = root.brightnessAvailable ? maximum : 0;
@@ -435,7 +474,11 @@ ShellRoot {
         applications: root.applications
         onTerminalRequested: {
             if (root.previewMode) root.pillMessage = "App launch is disabled in preview";
-            else { home.visible = false; terminal.running = true; }
+            else {
+                home.visible = false;
+                terminal.running = true;
+                if (root.keyboardMode === "manual") root.queueKeyboardAction("show");
+            }
         }
         onOverviewRequested: root.showOverview()
         onKeyboardRequested: {
@@ -490,6 +533,7 @@ ShellRoot {
         brightness: root.brightness
         maximumBrightness: root.maximumBrightness
         brightnessAvailable: root.brightnessAvailable
+        brightnessControlEnabled: root.brightnessControlAvailable
         keyboardVisible: root.keyboardVisible
         keyboardMode: root.keyboardMode
         onBrightnessRequested: value => root.setBrightness(value)
@@ -519,6 +563,7 @@ ShellRoot {
             root.lockRecoveryBlocked = false;
             unlockMarker.running = true;
             active = false;
+            Qt.callLater(() => root.showHome());
         }
         onLockFailed: {
             // The marker is the crash-recovery gate. Keep it for every failed lock attempt;

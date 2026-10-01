@@ -21,6 +21,7 @@ Scope {
     readonly property bool dark: root.active && darkState
 
     property bool darkState: true
+    property int restoreBrightness: 2047
     property bool wasSecure: false
     property bool unlockAnimationRunning: false
     property bool gestureTracking: false
@@ -34,6 +35,12 @@ Scope {
     property real gestureVelocity: 0
     property double gestureLastTime: 0
     property var activePointIds: []
+    property int touchPressCount: 0
+    property int touchMoveCount: 0
+    property int touchReleaseCount: 0
+    property int touchCancelCount: 0
+    property real lastTouchX: -1
+    property real lastTouchY: -1
     property var brightnessQueue: []
     property string activeBrightnessAction: ""
     property bool restoreQueued: false
@@ -71,7 +78,9 @@ Scope {
         const queue = root.brightnessQueue.slice();
         root.activeBrightnessAction = queue.shift();
         root.brightnessQueue = queue;
-        brightnessProcess.command = ["/usr/local/bin/willow-lock-display", root.activeBrightnessAction];
+        brightnessProcess.command = root.activeBrightnessAction === "restore"
+            ? ["/usr/local/bin/willow-lock-display", "restore", String(root.restoreBrightness)]
+            : ["/usr/local/bin/willow-lock-display", root.activeBrightnessAction];
         brightnessProcess.running = true;
     }
 
@@ -203,7 +212,7 @@ Scope {
             idleTimer.stop();
             root.darkState = false;
             if (sessionLock.locked)
-                sessionLock.unlock();
+                sessionLock.locked = false;
         }
     }
 
@@ -224,7 +233,7 @@ Scope {
         onTriggered: {
             if (root.active && !root.secure) {
                 if (sessionLock.locked)
-                    sessionLock.unlock();
+                    sessionLock.locked = false;
                 root.lockFailed();
             }
         }
@@ -300,10 +309,32 @@ Scope {
                     enabled: root.active && root.secure && !root.powerMenuVisible
                     maximumTouchPoints: 5
 
-                    onPressed: points => root.addTouchPoints(points)
-                    onUpdated: points => root.moveTouchPoints(points)
-                    onReleased: points => root.removeTouchPoints(points)
+                    onPressed: points => {
+                        root.touchPressCount++;
+                        if (points.length > 0) {
+                            root.lastTouchX = points[0].x;
+                            root.lastTouchY = points[0].y;
+                        }
+                        root.addTouchPoints(points);
+                    }
+                    onUpdated: points => {
+                        root.touchMoveCount++;
+                        if (points.length > 0) {
+                            root.lastTouchX = points[0].x;
+                            root.lastTouchY = points[0].y;
+                        }
+                        root.moveTouchPoints(points);
+                    }
+                    onReleased: points => {
+                        root.touchReleaseCount++;
+                        if (points.length > 0) {
+                            root.lastTouchX = points[0].x;
+                            root.lastTouchY = points[0].y;
+                        }
+                        root.removeTouchPoints(points);
+                    }
                     onCanceled: {
+                        root.touchCancelCount++;
                         root.activePointIds = [];
                         root.gestureTracking = false;
                         root.gestureInvalid = false;
@@ -328,8 +359,10 @@ Scope {
         onLockedChanged: {
             if (!sessionLock.locked && root.wasSecure) {
                 root.wasSecure = false;
+                const restoreNeeded = root.darkState;
                 root.darkState = false;
-                root.queueBrightness("restore");
+                if (restoreNeeded)
+                    root.queueBrightness("restore");
                 root.unlocked();
             }
         }
@@ -351,7 +384,7 @@ Scope {
         to: -root.surfaceHeight
         duration: 330
         easing.type: Easing.OutCubic
-        onFinished: sessionLock.unlock()
+        onFinished: sessionLock.locked = false
     }
 
 }

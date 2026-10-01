@@ -45,7 +45,8 @@ Scope {
         anchors { top: true; bottom: true; left: true; right: true }
         exclusiveZone: 0
         color: ThemeStore.background
-        WlrLayershell.layer: WlrLayer.Bottom
+        // Home must cover the focused app when the user returns from a gesture.
+        WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "willow-home"
 
         Item {

@@ -17,6 +17,8 @@ Scope {
     property int brightness: 0
     property int maximumBrightness: 0
     property bool brightnessAvailable: false
+    property bool brightnessControlEnabled: false
+    readonly property int minimumBrightness: Math.max(1, Math.ceil(maximumBrightness * 0.05))
     property bool keyboardVisible: false
     property string keyboardMode: "manual"
     property bool portraitLocked: true
@@ -45,10 +47,11 @@ Scope {
             visible = false;
     }
     function setBrightnessFromX(x) {
-        if (!root.brightnessAvailable || root.maximumBrightness <= 0)
+        if (!root.brightnessAvailable || !root.brightnessControlEnabled || root.maximumBrightness <= 0)
             return;
         const ratio = Math.max(0, Math.min(1, (x - brightnessTrack.x) / brightnessTrack.width));
-        root.brightnessRequested(Math.round(ratio * root.maximumBrightness));
+        root.brightnessRequested(Math.round(root.minimumBrightness
+            + ratio * (root.maximumBrightness - root.minimumBrightness)));
     }
 
     PanelWindow {
@@ -186,8 +189,8 @@ Scope {
                                 Text {
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: root.brightnessAvailable && root.maximumBrightness > 0
-                                          ? Math.round(root.brightness * 100 / root.maximumBrightness) + "%"
+                                    text: root.brightnessAvailable && root.brightnessControlEnabled && root.maximumBrightness > 0
+                                          ? Math.round(Math.max(root.minimumBrightness, root.brightness) * 100 / root.maximumBrightness) + "%"
                                           : "unavailable"
                                     color: ThemeStore.foreground
                                     font.family: ThemeStore.fontFamily
@@ -202,8 +205,9 @@ Scope {
                                 color: ThemeStore.selection
                                 clip: true
                                 Rectangle {
-                                    width: root.brightnessAvailable && root.maximumBrightness > 0
-                                           ? brightnessTrack.width * root.brightness / root.maximumBrightness : 0
+                                    width: root.brightnessAvailable && root.brightnessControlEnabled && root.maximumBrightness > 0
+                                           ? brightnessTrack.width * (Math.max(root.minimumBrightness, root.brightness) - root.minimumBrightness)
+                                             / Math.max(1, root.maximumBrightness - root.minimumBrightness) : 0
                                     height: parent.height
                                     radius: parent.radius
                                     color: ThemeStore.accent
@@ -214,8 +218,8 @@ Scope {
                                     spacing: 11
                                     Text { text: "☼"; color: ThemeStore.darkBackground; font.family: ThemeStore.fontFamily; font.pixelSize: 22; font.weight: Font.Bold }
                                     Text {
-                                        text: root.brightnessAvailable ? "Drag to adjust" : "Brightness control unavailable"
-                                    color: root.brightnessAvailable ? ThemeStore.darkBackground : ThemeStore.foreground
+                                        text: root.brightnessControlEnabled ? "Level · 5% minimum" : "Temporarily unavailable"
+                                    color: root.brightnessControlEnabled ? ThemeStore.darkBackground : ThemeStore.foreground
                                         font.family: ThemeStore.fontFamily
                                         font.pixelSize: 12
                                         font.weight: Font.Medium
@@ -225,7 +229,7 @@ Scope {
                                 }
                                 MouseArea {
                                     anchors.fill: parent
-                                    enabled: root.brightnessAvailable
+                                    enabled: root.brightnessAvailable && root.brightnessControlEnabled
                                     onPressed: mouse => root.setBrightnessFromX(mouse.x)
                                     onPositionChanged: mouse => { if (pressed) root.setBrightnessFromX(mouse.x); }
                                 }

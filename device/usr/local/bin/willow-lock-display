@@ -53,8 +53,15 @@ case ${1:-} in
         write_level 0
         ;;
     restore)
-        [ -r "$saved" ] || fail 'no saved brightness to restore'
-        restore=$(read_level "$saved")
+        restore=${2:-}
+        if [ -z "$restore" ]; then
+            [ -r "$saved" ] || fail 'no saved brightness to restore'
+            restore=$(read_level "$saved")
+        else
+            case $restore in
+                *[!0-9]*) fail 'restore override must be a non-negative integer' ;;
+            esac
+        fi
         [ "$restore" -gt 0 ] && [ "$restore" -le "$max" ] \
             || fail 'saved brightness is outside the valid range'
         write_level "$restore"
@@ -70,7 +77,7 @@ case ${1:-} in
         fi
         ;;
     *)
-        echo 'usage: willow-lock-display dim|restore|status' >&2
+        echo 'usage: willow-lock-display dim|restore [LEVEL]|status' >&2
         exit 2
         ;;
 esac

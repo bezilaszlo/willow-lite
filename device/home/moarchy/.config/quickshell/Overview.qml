@@ -21,6 +21,10 @@ Scope {
     property var lastFocusedWindow: null
     property var previousWindow: null
     property var mruWindows: []
+    property int bottomPressCount: 0
+    property int bottomMoveCount: 0
+    property int bottomReleaseCount: 0
+    property int bottomCancelCount: 0
     signal homeRequested()
     signal drawerRequested()
     readonly property real gestureTravel: 280
@@ -426,6 +430,7 @@ Scope {
             property bool wasOpen: false
             property bool recentsStarted: false
             onPressed: mouse => {
+                root.bottomPressCount++;
                 startY = mouse.y;
                 startX = mouse.x;
                 lastY = mouse.y;
@@ -439,6 +444,7 @@ Scope {
                 recentsStarted = false;
             }
             onPositionChanged: mouse => {
+                root.bottomMoveCount++;
                 const now = Date.now();
                 const elapsed = Math.max(1, now - lastAt);
                 const dx = mouse.x - startX;
@@ -470,6 +476,7 @@ Scope {
                     root.dragProgress = Math.max(0, Math.min(1, dy / 620));
             }
             onReleased: mouse => {
+                root.bottomReleaseCount++;
                 recentsHold.stop();
                 if (!dragging)
                     return;
@@ -502,6 +509,7 @@ Scope {
                 recentsStarted = false;
             }
             onCanceled: {
+                root.bottomCancelCount++;
                 recentsHold.stop();
                 if (dragging && !wasOpen)
                     root.endGesture(false);
