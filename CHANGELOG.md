@@ -1,7 +1,8 @@
 # Changelog
 
 ## 2026-10-02
-- Start staging Home when an unlock swipe commits, then release the native session lock only after both the matching Home frame is presented and the lock-cover animation finishes. A timeout stops the animation and keeps the session locked. Full-shell host loading passed and the two-file update was installed through a secure-preserving Quickshell-only reload; the native secure lock reacquired successfully. Physical unlock behavior remains unverified.
+- Start staging Home when an unlock swipe commits, then release the native session lock only after both the matching Home frame is presented and the lock-cover animation finishes. A timeout stops the animation and keeps the session locked. Full-shell host loading passed and the two-file update was installed through a secure-preserving Quickshell-only reload; the native secure lock reacquired successfully. Physical unlock behavior was pending at deployment.
+- After deployment of `f7b8a3f`, the user reported that the physical wake/unlock “looks ok to me.” This is user-reported visual confirmation; no fresh screen recording was captured or reviewed, and secure recording behavior remains unverified.
 
 ## 2026-10-01
 - Gate native lock release on an actual Home-layer `QQuickWindow.frameSwapped` after Home is staged behind `WlSessionLock`; cancel the handoff if the lock dims or the request becomes stale, and keep the session locked on timeout. The isolated 540×1170 host probe received a rendered Home frame; physical unlock behavior still needs user confirmation.
