@@ -697,7 +697,7 @@ ShellRoot {
         }
         onCommandRequested: text => root.launchCommand(text)
         onDismissRequested: if (!lock.active && !root.lockAcquiring) home.visible = false
-        onUnlockFramePresented: requestId => lock.releaseAfterHomeFrame(requestId)
+        onUnlockFramePresented: requestId => lock.noteHomeFramePresented(requestId)
     }
     Overview {
         id: overview

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-02
+- Start staging Home when an unlock swipe commits, then release the native session lock only after both the matching Home frame is presented and the lock-cover animation finishes. A timeout stops the animation and keeps the session locked. Full-shell host loading passed and the two-file update was installed through a secure-preserving Quickshell-only reload; the native secure lock reacquired successfully. Physical unlock behavior remains unverified.
+
 ## 2026-10-01
 - Gate native lock release on an actual Home-layer `QQuickWindow.frameSwapped` after Home is staged behind `WlSessionLock`; cancel the handoff if the lock dims or the request becomes stale, and keep the session locked on timeout. The isolated 540×1170 host probe received a rendered Home frame; physical unlock behavior still needs user confirmation.
 - Keep the Record button's busy state tied to the user action rather than its background status poll, and reconcile queued taps against fresh recorder state. The full shell loaded in the isolated host compositor and the change is deployed; the user should retest the button.

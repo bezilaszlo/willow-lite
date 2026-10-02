@@ -2,6 +2,14 @@
 
 This task-owned status note tracks source, preview, deployment, and physical validation separately. The user-authored design brief and mockup remain the source of truth.
 
+## Current status — 2026-10-02
+
+- The unlock handoff now starts staging Home at the committed unlock-swipe animation start. It tracks the matching Home `QQuickWindow.frameSwapped` and animation completion independently; native lock release waits for both. Timeout stops the animation before resetting the offset and leaves the secure session locked. Cancel/dim clears both readiness flags and invalidates the request.
+- In the user's clip of the previous deployed build (`out/recording-review-20261001-unlock-retest/analysis.md`), the user said the transition was “definitely better”; review found no terminal flash, but a short dark gap from 10.75–11.0 s before Home appeared at 11.25 s. The current change targets that gap; it has not yet had a physical retest.
+- A bounded full-shell load succeeded under a task-owned 540×1170 headless Sway output: Quickshell remained running and logged `Configuration Loaded`, with no QML load/type errors. Logs are in ignored `out/full-shell-load-20261002.SQQIN2/`.
+- The ordinary sync script correctly refused the locked session. A separately authorized secure-preserving deployment backed up and replaced only `LockScreen.qml` and `willow.qml`, then performed one exact Quickshell-only reload with `/run/user/1000/willow-session-locked` retained. New QS PID 764111 reported `lockActive=true`, `lockSecure=true`, and `lockAcquiring=false`; Hyprland stayed PID 406, there was one Willow QS and one `handle-power-key` inhibitor, and the runtime error filter was empty. Installed hashes match the reviewed source: LockScreen `ef3748886a795bc100edc58a89e934d1eedd541a003eed5ec484e0a26b07a489`, willow.qml `b9b0af6e89afe4a29dcd01422a7458c0d2634043a8b793921b076c24682f7bd9`. Deployment evidence and private before-copies are in ignored `out/locked-redeploy-20261002/`; the phone backup is `/home/moarchy/.local/state/willow/deploy-backups/lock-preserve-20261002.LD0y6f`.
+- The device remains securely locked. No unlock was issued and no physical panel visibility, unlock transition, or recording retest was observed; the user's post-install check remains pending.
+
 ## Current status — 2026-10-01
 
 This addendum supersedes older runtime and validation statements below where they differ.

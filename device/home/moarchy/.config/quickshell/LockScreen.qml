@@ -26,6 +26,8 @@ Scope {
     property bool unlockAnimationRunning: false
     property int unlockRequestSequence: 0
     property int pendingUnlockRequest: 0
+    property bool unlockHomeFrameReady: false
+    property bool unlockAnimationFinished: false
     property bool gestureTracking: false
     property bool gestureWasDark: false
     property bool gestureInvalid: false
@@ -67,18 +69,16 @@ Scope {
         acquireTimeout.restart();
     }
 
-    function releaseAfterHomeFrame(requestId) {
+    function noteHomeFramePresented(requestId) {
         if (!root.active || !root.secure || !root.awake || !root.unlockAnimationRunning
                 || requestId === 0 || requestId !== root.pendingUnlockRequest)
             return
-        unlockHomeTimeout.stop()
-        root.pendingUnlockRequest = 0
-        root.unlockAnimationRunning = false
+        root.unlockHomeFrameReady = true
         root.diagnosticEvent("lock.home-frame-presented", "request=" + requestId)
-        sessionLock.locked = false
+        root.completeUnlockHandoff()
     }
 
-    function requestUnlockAfterAnimation() {
+    function beginUnlockHandoff() {
         if (!root.active || !root.secure || !root.unlockAnimationRunning
                 || root.pendingUnlockRequest !== 0)
             return
@@ -88,9 +88,34 @@ Scope {
         }
         root.unlockRequestSequence++
         root.pendingUnlockRequest = root.unlockRequestSequence
+        root.unlockHomeFrameReady = false
+        root.unlockAnimationFinished = false
         root.diagnosticEvent("lock.home-frame-request", "request=" + root.pendingUnlockRequest)
         unlockHomeTimeout.restart()
         root.unlockRequested(root.pendingUnlockRequest)
+    }
+
+    function completeUnlockHandoff() {
+        const requestId = root.pendingUnlockRequest
+        if (!root.active || !root.secure || !root.awake || !root.unlockAnimationRunning
+                || requestId === 0 || !root.unlockHomeFrameReady || !root.unlockAnimationFinished)
+            return
+        unlockHomeTimeout.stop()
+        root.pendingUnlockRequest = 0
+        root.unlockHomeFrameReady = false
+        root.unlockAnimationFinished = false
+        root.unlockAnimationRunning = false
+        root.diagnosticEvent("lock.home-frame-and-animation-ready", "request=" + requestId)
+        sessionLock.locked = false
+    }
+
+    function finishUnlockAnimation() {
+        if (!root.active || !root.secure || !root.awake || !root.unlockAnimationRunning
+                || root.pendingUnlockRequest === 0)
+            return
+        root.unlockAnimationFinished = true
+        root.diagnosticEvent("lock.unlock-animation-finished", "request=" + root.pendingUnlockRequest)
+        root.completeUnlockHandoff()
     }
 
     function cancelUnlockHandoff(reason) {
@@ -100,6 +125,8 @@ Scope {
         unlockHomeTimeout.stop()
         unlockContent.stop()
         root.pendingUnlockRequest = 0
+        root.unlockHomeFrameReady = false
+        root.unlockAnimationFinished = false
         root.unlockAnimationRunning = false
         root.swipeOffset = 0
         root.diagnosticEvent("lock.home-frame-cancelled", "request=" + requestId + " reason=" + reason)
@@ -190,6 +217,7 @@ Scope {
         if (root.gestureTravel > 200 || (root.gestureTravel > 80 && root.gestureVelocity > 0.5)) {
             root.unlockAnimationRunning = true;
             idleTimer.stop();
+            root.beginUnlockHandoff();
             unlockContent.start();
         } else {
             returnAnimation.start();
@@ -313,7 +341,10 @@ Scope {
                     || root.pendingUnlockRequest === 0)
                 return
             const requestId = root.pendingUnlockRequest
+            unlockContent.stop()
             root.pendingUnlockRequest = 0
+            root.unlockHomeFrameReady = false
+            root.unlockAnimationFinished = false
             root.unlockAnimationRunning = false
             root.swipeOffset = 0
             root.diagnosticEvent("lock.home-frame-timeout", "request=" + requestId)
@@ -465,7 +496,7 @@ Scope {
         to: -root.surfaceHeight
         duration: 330
         easing.type: Easing.OutCubic
-        onFinished: root.requestUnlockAfterAnimation()
+        onFinished: root.finishUnlockAnimation()
     }
 
 }
